@@ -4,7 +4,7 @@
 
 s7 Scheme bindings for Rust
 
-About s7:
+About s7 (and API document):
 [https://ccrma.stanford.edu/software/snd/snd/s7.html](https://ccrma.stanford.edu/software/snd/snd/s7.html).
 
 ## Prerequisites:
