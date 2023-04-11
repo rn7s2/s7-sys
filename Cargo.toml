@@ -7,6 +7,7 @@ build = "build.rs"
 license = "MIT"
 categories = ["external-ffi-bindings"]
 description = "s7 Scheme bindings for Rust"
+repository = "https://github.com/rn7s2/s7-sys"
 
 [dependencies]
 
