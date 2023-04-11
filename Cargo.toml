@@ -1,0 +1,15 @@
+[package]
+name = "s7-sys"
+version = "0.1.0"
+authors = ["rn7s2 <mail@rn7s2.cn>"]
+edition = "2021"
+build = "build.rs"
+license = "MIT"
+categories = ["external-ffi-bindings"]
+description = "s7 Scheme bindings for Rust"
+
+[dependencies]
+
+[build-dependencies]
+bindgen = "^0.65.1"
+cc = "^1.0.79"
