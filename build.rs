@@ -5,7 +5,10 @@ fn main() {
     println!("cargo:rerun-if-changed=build.rs");
 
     println!("cargo:rustc-link-search=native=m");
-    cc::Build::new().file("s7/s7.c").compile("s7");
+    cc::Build::new()
+        .flag_if_supported("/std:c17")
+        .file("s7/s7.c")
+        .compile("s7");
 
     let bindings = bindgen::Builder::default()
         .header("wrapper.h")
