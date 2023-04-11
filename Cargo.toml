@@ -6,7 +6,7 @@ edition = "2021"
 build = "build.rs"
 license = "MIT"
 categories = ["external-ffi-bindings"]
-keywords = ["ffi", "bindings", "scheme", "s7", "scripting", "interpreter"]
+keywords = ["ffi", "bindings", "scheme", "scripting", "interpreter"]
 description = "s7 Scheme bindings for Rust"
 repository = "https://github.com/rn7s2/s7-sys"
 
