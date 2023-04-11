@@ -1,5 +1,7 @@
 # s7-sys
 
+![crates.io](https://img.shields.io/crates/v/s7-sys.svg)
+
 s7 Scheme bindings for Rust
 
 About s7:
