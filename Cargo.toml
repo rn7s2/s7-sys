@@ -14,4 +14,4 @@ repository = "https://github.com/rn7s2/s7-sys"
 
 [build-dependencies]
 bindgen = "0.69.4"
-cc = "1.0.99"
+cc = "<1.0.97"

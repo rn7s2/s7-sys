@@ -8,12 +8,7 @@ fn main() {
     cc::Build::new()
         .flag_if_supported("/std:c17")
         .flag_if_supported("-std=c17")
-        .flag_if_supported("/w")
         .flag_if_supported("-w")
-        .flag_if_supported("/DWITH_C_LOADER")
-        .flag_if_supported("-DWITH_C_LOADER=1")
-        .flag_if_supported("/DWITH_SYSTEM_EXTRAS")
-        .flag_if_supported("-DWITH_SYSTEM_EXTRAS=1")
         .file("s7/s7.c")
         .compile("s7");
 
