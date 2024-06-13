@@ -24,6 +24,8 @@
 ;;;   the labels and case*'s matching function can be used anywhere -- see below, "match?" etc
 ;;;
 ;;;   (case* x ((3.14) 'pi)) returns 'pi if x is 3.14
+;;;   (case* "asdf" (("asde") 0) (("asdf") 1) (else 2)) is 1
+;;;   (case* "asdf" ((#<"asd*">) 0) (("asdf") 1) (else 2)) is 0
 ;;;   (case* x ((#<symbol?>))) returns #t if x is a symbol
 ;;;   (case* x (((+ 1 #<symbol?>)))) matches if x is any list of the form '(+ 1 x) or any other symbol in place of "x"
 ;;;   (case* x (((#<symbol?> #<e1:...> (+ #<e2:...>))) (append #<e1> #<e2>))), passed '(a b c d (+ 1 2)), returns '(b c d 1 2)
@@ -365,7 +367,7 @@
  (case* x
    ((a b) 'a-or-b)
    ((1 2/3 3.0) => (lambda (a) (* a 2)))
-   ((#_pi) 1 123)
+   ((pi) 1 123)
    (("string1" "string2"))
    ((#<symbol?>) 'symbol!)
    (((+ x #<symbol?>)) 'got-list)
@@ -382,7 +384,7 @@
    (else 'oops)))
 
 (test (scase 3.0) 6.0)
-(test (scase pi) 123)
+(test (scase 'pi) 123)
 (test (scase "string1") "string1")
 (test (scase "string3") 'oops)
 (test (scase 'a) 'a-or-b)

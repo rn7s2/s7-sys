@@ -1,4 +1,4 @@
-(set! (*s7* 'heap-size) 128000) ; old-style
+(set! (*s7* 'heap-size) 128000) ; old-style -- makes little difference (30 in callgrind)
 (load "s7test-block.so" (sublet (curlet) (cons 'init_func 'block_init)))
 
 (define (check-cyclic p1)
@@ -9,8 +9,13 @@
 		 (equal? c2 c3))
       (format *stderr* "cyclic: ~S: ~S ~S ~S~%" p1 c1 c2 c3))))
 
+;(define wait-size 20000) ; this makes the gc work much harder (especially the mark process, mark_vector linearly etc)
+(if (defined? 'big-tgc)
+    (define-expansion (wait-size) 20000) ; plug in the constant to avoid endless lookups (this is cheating)
+    (define-expansion (wait-size) 200)) ; plug in the constant to avoid endless lookups (this is cheating)
+
 (define (tgc-cyclic tries)
-  (let ((wait (make-vector 200 #f)))
+  (let ((wait (make-vector (wait-size) #f)))
     (do ((i 0 (+ i 1)))
 	((= i tries))
       (let ((p1 (cons 1 2))
@@ -82,7 +87,7 @@
 				      (check-cyclic b1)
 				      (for-each 
 				       (lambda (a)
-					 (let ((pos (random 200)))
+					 (let ((pos (random (wait-size))))
 					   (if (eq? (vector-ref wait pos) #\c) ; just check that it hasn't been freed
 					       (format *stderr* "~S?" (vector-ref wait pos)))
 					   (vector-set! wait pos a))
@@ -103,7 +108,7 @@
 
 
 (define (tgc tries)
-  (do ((wait (make-vector 200 #f))
+  (do ((wait (make-vector (wait-size) #f))
        (i 0 (+ i 1)))
       ((= i tries))
     (let ((p1 (cons 1 2))
@@ -136,7 +141,7 @@
 	     (c1 (c-pointer 0 integer? "info" (cons h1 h2) (vector p3 p2 p1))))
 	(for-each 
 	 (lambda (a)
-	   (let ((pos (random 200)))
+	   (let ((pos (random (wait-size))))
 	     (if (eq? (vector-ref wait pos) #\c) ; just check that it hasn't been freed
 		 (format *stderr* "~S?" (vector-ref wait pos)))
 	     (vector-set! wait pos a))
@@ -153,7 +158,9 @@
 	       #f))
 	 (list p1 p2 p3 v1 v2 v3 v4 s1 iv2 iv2 h1 h2 i1 in1 in2 c1 cc ex1 u1 g1 it1 b1))))))
 
-(tgc 200000)
+(if (defined? 'big-case)
+    (tgc 1000000)
+    (tgc 200000))
 ;(tgc 1000000000)
 
 (exit)

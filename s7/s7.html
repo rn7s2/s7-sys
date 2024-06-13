@@ -85,6 +85,17 @@
 		      -moz-border-radius: 4px;
 		      -webkit-border-radius: 4px;
 		      } 
+        DIV.smallseparator {margin-top: 10px;
+	               margin-bottom: 10px;
+	               border: 2px solid #00ff00; /* green */
+		       background-color: #f5f5dc; /* beige */
+		       padding-top: 4px;
+		       width: 20%;
+		      border-radius: 4px;
+		      -moz-border-radius: 4px;
+		      -webkit-border-radius: 4px;
+		      text-align: center;
+		      } 
         BODY.body {background-color: #ffffff;    /* white */
 	           margin-right: 20px;
 	           margin-left: 20px; 
@@ -211,6 +222,7 @@ indented and on a sort of brownish background.
       <li><a href="#dload">Load a C module dynamically</a>
       <li><a href="#gmpex">gmp and friends</a>
       <li><a href="#gdb">gdb</a>
+      <li><a href="#webassembly">WASM</a>
       <li><a href="#ffinotes">FFI notes</a>
   </ul>
 
@@ -751,6 +763,16 @@ have been evaluated (as in named let).
 &gt; (foo x 1)
 <em class="gray">1</em>
 </pre>
+
+<p>Keywords (named arguments) also work in named let*:
+</p>
+<pre class="indented">
+&gt; (let* loop ((i 0) (j 0)) 
+      (if (> i 3)
+          (+ i j) 
+          (loop :j 2 :i (+ i 1))))
+<em class="gray">6</em>
+</pre>
 </div>
 
 
@@ -875,12 +897,12 @@ unknown key handling is not good, :allow-key-values?
 (f4 'hi) -> (:hi)
 
 (define* (f5 a)
-  ((lambda* (hi) (list hi)) (symbol->keyword a) 32))
+  ((lambda* (hi) (list hi)) (symbol->keyword a) 32)) ; -> ((lambda* (hi) (list hi)) :hi 32) -> '(32)
 (f5 'hi) -> (32)
 
 (define* (f6 a b)
   ((lambda* (hi) (list hi)) a b))
-(f6 :hi 1) -> unknown key :hi
+(f6 :hi 1) -> unknown key :hi -> (unknown to f6)
 
 (define* (f7 a b) (list a b))
 (f7 :hi) -> (:hi #f)
@@ -949,7 +971,7 @@ wants an expression:
 <em class="gray">(+ 1 32)</em>
 </pre>
 
-<p>gensym returns a symbol that is guaranteed to be unused.  It takes an optional string argument
+<p>gensym returns a symbol that is guaranteed to be unique.  It takes an optional string argument
 giving the new symbol name's prefix.  gensym? returns #t if its argument is a symbol created by gensym.
 </p>
 
@@ -1073,7 +1095,7 @@ The calling environment itself is (outlet (curlet)) from within a bacro, so
 	     (if (pair? f) (car f) f))
 	   (map (lambda (slot)
 		  (values (symbol-&gt;keyword (car slot)) (cdr slot)))		  
-		(reverse (map values ,(outlet (curlet)))))))
+		(map values ,(outlet (curlet))))))
 
 (define (f1 a b)
   (holler)
@@ -1095,8 +1117,8 @@ Since a bacro (normally) sheds its define-time environment:
 <em class="red">error</em><em class="gray">: x: unbound variable</em>
 </pre>
 <p>
-A macro here returns 3.  But don't be hasty!  The bacro can get its define-time environment (its closure)
-via funclet, so in fact, define-macro is a special case of define-bacro!  We can define
+A macro here returns 3.  The bacro can get its define-time environment (its closure)
+via funclet, so define-macro is a special case of define-bacro!  We can define
 macros that work in all four ways: the expansion can happen in either the definition or calling environment,
 as can the evaluation of that expansion.  In a bacro, both happen in the calling environment
 if we take no other action, and in a normal macro (define-macro), the expansion happens in the definition
@@ -1174,18 +1196,18 @@ either.  In Scheme the reader turns ,x into (unquote x), so:
 <em class="gray">7</em>
 </pre>
 <p>comma becomes a sort of symbol macro! I think I'll remove unquote; ,x and ,@x will still work
-as expected, but there will not be any "unquote" or "unquote-splicing" in the resultant source code.  Just to make life difficult:
-</p>
-<pre>
-&gt; (let (' 1) quote)
-<em class="gray">1</em>
-</pre>
-<p>but that translation is so ingrained in lisp
-that I'm reluctant to change it.  The two unquote names, on the
-other hand, seem unnecessary.
+as expected, but there will not be any "unquote" or "unquote-splicing" in the resultant source code.
 </p>
 </div>
 </blockquote>
+
+<div class="smallseparator"><h4>hygienic macros</h4></div>
+
+<div class="indented">
+tldr: To make a macro hygienic, in the expanded code replace the names of things with the things themselves.  For built-in values, use "#_",
+e.g. "#_abs" rather than "abs".  For macro-definition-time variables, use ",abs" rather than "abs".  If possible, replace other names with gensyms.
+As a last resort, use the explicit environment functions like let-ref and with-let.
+</div>
 
 <p>s7 macros are not hygienic.  For example,
 </p>
@@ -1368,14 +1390,34 @@ control over the environment at any point:
 </pre>
 
 <p>Hygienic macros are trivial!  Who needs syntax-rules?
-To avoid the variable capture, avoid local variables in the generated code, or
-protect them via with-let; to avoid shadowing of functions and syntax, make the
-environment explicit (via #_ for example).
-s7's lint.scm will warn you about a problematic macro expansion, so I'd
-say just write macros as simply as possible, then let lint tell you
-that it's time to do the with-let shuffle. When that happens, wrap the macro body in
-a with-let that captures the current environment, and at each use of a macro argument
-wrap it in a with-let that re-establishes that environment. 
+Here's an example of the while macro in stuff.scm before and after 
+hygienification (using "exit" rather than "break"):
+</p>
+
+<pre>
+(define-macro (innocent-while test . body)
+  `(call-with-exit
+    (lambda (exit)
+      (let loop ()
+	(call-with-exit
+	 (lambda (continue)
+	   (do () ((not ,test) (exit))
+	     ,@body)))
+	(loop)))))
+
+(define-macro (cynical-while test . body)
+  (let ((loop (gensym)))
+    `(#_call-with-exit
+       (#_lambda (exit)
+         (#_let ,loop ()
+           (#_call-with-exit
+	     (#_lambda (continue)
+	       (#_do () ((#_not ,test) (exit))
+	         ,@body)))
+	   (,loop))))))
+</pre>
+<p>There are many more examples in s7test.scm (see especially the "or" macros
+toward the end of s7test.scm).
 </p>
 
 <blockquote>
@@ -1418,6 +1460,8 @@ wrap it in a with-let that re-establishes that environment.
 </div>
 </blockquote>
 
+<!--
+<br>
 <p>
 If you want the macro's expanded result
 to be evaluated in its definition environment:
@@ -1433,7 +1477,9 @@ to be evaluated in its definition environment:
     (list (mac 1) 
 	  (mac-1 1))))
 </pre>
+-->
 
+<!--
 <blockquote>
 <div class="indented">
 <p>Here are some variations on "unless", inspired by the wikipedia hygienic macro page:
@@ -1489,6 +1535,8 @@ to be evaluated in its definition environment:
 </pre>
 </div>
 </blockquote>      
+-->
+
 
 <!--
 (define (tree-quote tree args)
@@ -1599,12 +1647,6 @@ to be evaluated in its definition environment:
 </p>
 </div>
 </blockquote>
-
-<!--
- when is (define-macro (f a) `(+ ,a 1)) not the same as (define (f a) (+ a 1))?
-   (f (values 2 3))
-   (f most-positive-fixnum) but only because the optimizer messes this up
--->
 
 
 
@@ -2101,6 +2143,10 @@ function passed as its second argument:
 <em class="gray">(0 1 2 3 4 5 6 7 8 9)</em>
 </pre>
 
+<p>sort! calls qsort or qsort_r; if the sequence is large (more than 1024 elements?), qsort_r may allocate an internal array;
+if the comparison function raises an error, this internal array will probably not be freed.
+</p>
+
 <p>Underlying some of these functions are generic iterators, also built-into s7:
 </p>
 
@@ -2159,8 +2205,19 @@ variable named '+iterator+ with a non-#f value:
 </pre>
 <p>The +iterator+ variable is similar to the '+documentation+ variable used by documentation.
 It gives make-iterator some hope of catching inadvertent bogus function arguments that would
-otherwise cause an infinite loop. 
+otherwise cause an infinite loop.  But unfortunately it can escape and infect 
+other functions:
 </p>
+<pre class="indented">
+(with-let (let ((<em class="red">+iterator+</em> #t)) 
+            (lambda () #&lt;eof&gt;))             ; we intended this to be our iterator
+  (concatenate vector (lambda a (copy a)))) ; from stuff.scm
+  ;; (lambda a (copy a)) is also considered an iterator by map (in sequences-&gt;list) because 
+  ;; the local +iterator+ is #t. "a" is () because there are no further arguments to
+  ;; concatenate, so (lambda a (copy a)) is generating infinitely many ()'s and this 
+  ;; code eventually dies with a heap overflow!
+</pre>
+
 
 
 <div class="header" id="multidimensionalvectors"><h4>multidimensional vectors</h4></div>
@@ -2300,6 +2357,7 @@ the underlying vector, and subvector-position returns the starting point of the 
 in the underlying data.
 </p>
 
+<!--
 <div class="small">
 <p>subvector's parameter list changed 8-Jul-2020. It was <code>(subvector vect new-length-or-dimension-list start)</code>,
 but that conflicts with substring, and is confusing (the start position follows the length).  To translate from
@@ -2314,6 +2372,7 @@ the old subvector to the new:
           (subvector vect offset (+ offset len)))))
 </pre>
 </div>
+-->
 <blockquote>
 
 <div class="indented">
@@ -2987,9 +3046,8 @@ This is similar to a let form inside another let.
 </pre>
 <p>
 To add the bindings directly to the environment,
-use <b>varlet</b>.  Both of these functions accept () as the
-'env' argument as shorthand for <code>(rootlet)</code>.
-Both also accept other environments as well as individual bindings,
+use <b>varlet</b>.  
+Both accept environment other than the first as well as individual bindings,
 adding all the argument's bindings to the new environment.
 <b>inlet</b> is very similar, but normally omits the environment argument.
 The arguments to sublet and inlet can be passed as
@@ -2997,6 +3055,19 @@ symbol/value pairs, as a cons, or using keywords as if in define*.
 inlet can also be used to copy an environment without accidentally invoking
 that environment's copy method.
 </p>
+
+<p>To implement read-time lets using #let(...):
+</p>
+<pre>
+(set! *#readers* 
+      (cons (cons #\l (lambda (str)
+			(and (string=? str "let") ; #let(...)
+			     (apply inlet (read)))))
+	    *#readers*))
+
+(display #let(:a 1)) (newline)
+(display #let(:a 1 :b "str")) (newline)
+</pre>
 
 <p>Here's an example of varlet: we want to define two functions that share a
 local variable:
@@ -3401,9 +3472,9 @@ know the field names in advance,
 <p>Here's one way to add a method to a closure:
 </p>
 <pre class="indented">
-(define sf (let ((object-&gt;string (lambda (obj . arg) 
-				   "#&lt;secret function!&gt;")))
-	     (openlet (lambda (x) 
+(define sf (openlet (let ((object-&gt;string (lambda (obj . arg) 
+				            "#&lt;secret function!&gt;")))
+	              (lambda (x) 
 			(+ x 1)))))
 &gt; sf
 <em class="gray">#&lt;secret function!&gt;</em>
@@ -3490,11 +3561,14 @@ exactly like a normal macro,
 so you can use <code>(values '(define a 1) '(define b 2))</code> to
 splice multiple definitions at the macro invocation point.  
 If an expansion returns (values), nothing is spliced in.  This is
-mostly useful in <a href="#readercond">reader-cond</a> and the #; reader.
+mostly useful in <a href="#readercond">reader-cond</a> and the #; reader, but
+unfortunately, it is tricky to use.  The reader only knows about things globally defined
+when it encounters them, and a locally defined expansion is handled as a normal macro,
+so:
 </p>
 
 <pre class="indented">
-&gt; (define-expansion (comment str) (values))
+&gt; (define-expansion (comment str) (values)) ; this must be at the top-level
 <em class="gray">comment</em>
 &gt; (+ 1 (comment "one") 2 (comment "two"))
 <em class="gray">3</em>
@@ -3890,7 +3964,7 @@ a modern GUI leaves formatting decisions to a text or table widget.
 <p>format is a mess.  It is trying to cram two different choices into its first ("port") argument.
 Perhaps it should be split into format-&gt;string and format-&gt;port.  format-&gt;string has no
 port argument and returns a string.  format-&gt;port writes to its port argument (which must be an output
-port, not a boolean), and returns #f or maybe &lt;unspecified&gt;.  Then:
+port, not a boolean), and returns an empty string.  Then:
 </p>
 <pre>
 (format #f ...) -&gt; (format-&gt;string ...)
@@ -4025,13 +4099,14 @@ result = s7_call(s7, hook, s7_list(s7, 2, s7_make_integer(s7, 1), s7_make_intege
 
 
 <pre class="indented">
-(<em class=def id="documentation">documentation</em> obj)          ; old name: (procedure-documentation obj)
-(<em class=def id="signature">signature</em> obj)              ; old:      (procedure-signature obj)
-(<em class=def id="setter">setter</em> obj)                 ; old:      (procedure-setter obj)
-(<em class=def id="arity">arity</em> obj)                  ; very old: (procedure-arity obj)
+(<em class=def id="documentation">documentation</em> obj)
+(<em class=def id="signature">signature</em> obj)
+(<em class=def id="setter">setter</em> obj)
+(<em class=def id="arity">arity</em> obj)
 (<em class=def id="aritablep">aritable?</em> obj num-args)
 (funclet proc)
 (<em class=def id="proceduresource">procedure-source</em> proc)
+(<em class=def id="procedurearglist">procedure-arglist</em> proc)
 </pre>
 
 <p>
@@ -4046,7 +4121,7 @@ a procedure's environment.
 </pre>
 
 <p>
-<b>setter</b> returns or sets the set function associated with a procedure (set-car! with car, for example).
+<b>setter</b> returns or sets the setter function associated with a procedure (set-car! with car, for example).
 </p>
 
 <p>
@@ -4055,6 +4130,9 @@ a procedure's environment.
 <pre class="indented">
 (define (procedure-arglist f) (cadr (procedure-source f)))
 </pre>
+<p><b>procedure-arglist</b> returns the procedure's argument list.
+"procedure" here refers to functions and macros defined in s7, not built-in procedures.
+</p>
 
 <p>
 <b>documentation</b> returns the documentation string associated with a procedure.  This is normally
@@ -4089,7 +4167,7 @@ you can treat the initial string in the function's body as documentation.
 </pre>
 
 <p>
-<b>arity</b> takes any object and returns either #f if it is not applicable,
+<b>arity</b> takes any object and returns either #f if that object is not applicable,
 or a cons containing the minimum and maximum number of arguments acceptable.  If the maximum reported
 is a really big number, that means any number of arguments is ok.
 <b>aritable?</b> takes two arguments, an object and an integer, and returns #t if the object can be
@@ -4133,11 +4211,14 @@ argument types.  #t means any type is possible, and 'values means the function r
 </pre>
 
 <p>which says that the first argument to char-position can be a string or a character,
-and the return type can be either boolean or an integer.  If we know a function returns
-multiple values, the return type (first element of the signature) can contain a list 
-describing each such value: <code>(define (f x) (values (floor x) (ceiling x)))</code>
-could be <code>(((integer?) (integer?)) real?)</code>.
+and the return type can be either boolean or an integer.  To specify the types returned
+if multiple values are returned, use (values type1 ..).  So the function:
 </p>
+<code>(define (f int) (case ((0) (values 0 1)) ((1) ((values 'a 1)) (else 0))))</code>
+<p>could declare its signature to be
+</p>
+<code>(((values integer? integer?) (values symbol? integer?) integer?) integer?)</code>
+;; or would it be better to omit the 'values and just have a list of types?
 <p>
 If the function is defined in scheme, its signature is the value of the '+signature+ variable
 in its closure:
@@ -4155,7 +4236,7 @@ in its closure:
 <em class="gray">(boolean? real?)</em>
 </pre>
 
-<p>We could do the same thing using methods:
+<p>We can do the same thing using methods:
 </p>
 
 <pre class="indented">
@@ -4170,7 +4251,7 @@ in its closure:
 <em class="gray">(boolean? real?)</em>
 </pre>
 
-<p>signature could also be used to implement CL's 'the:
+<p>signature can also be used to implement CL's 'the:
 </p>
 <pre class="indented">
 (define-macro (the value-type form)
@@ -4316,12 +4397,14 @@ Other functions:
 <li><em class=def id="portfilename">port-filename</em> and 
     <em class=def id="portlinenumber">port-line-number</em> (input ports)
 <li><em class=def id="portposition">port-position</em> (input port, settable)
+<li><em class=def id="portstring">port-string</em> (string port, settable)
 <li><em class=def id="portfile">port-file</em> 
 </ul>
 
 <p>Use length to get the length in bytes of an input port's file or string.
 port-line-number is settable (for fancy *#readers*). 
 <b>port-position</b> is the position in bytes of the reader in the port. It is settable.
+<b>port-string</b> is the string contents of a string port. It is also settable.
 <b>port-file</b> is intended for use with the *libc* library.  It returns a c-pointer
 containing the FILE* pointer associated with the file port (except in Windows):
 </p>
@@ -4448,7 +4531,7 @@ the dumb "lambda".  Here are more useful examples:
       (close-output-port p)))
   (openlet 
    (inlet :name name
-	  :format (lambda (p str . args) (logit (p 'name) (apply format #f str args)))))))
+	  :format (lambda (p str . args) (logit (p 'name) (apply format #f str args)))
 	  :write (lambda (obj p)         (logit (p 'name) (object-&gt;string obj #t)))
 	  :display (lambda (obj p)       (logit (p 'name) (object-&gt;string obj #f)))
 	  :write-string (lambda (str p)  (logit (p 'name) str))
@@ -4456,7 +4539,7 @@ the dumb "lambda".  Here are more useful examples:
 	  :newline (lambda (p)           (logit (p 'name) (string #\newline)))
 	  :output-port? (lambda (p) #t)
 	  :close-output-port (lambda (p) #f)
-	  :flush-output-port (lambda (p) #f)
+	  :flush-output-port (lambda (p) #f))))
 
 (let ((p (open-output-log "logit.data")))
   (format p "this is a test~%")
@@ -4485,7 +4568,7 @@ adds:
 (delete-file str)        ; try to delete the file, return 0 is successful, else -1
 (getenv var)             ; return the value of an environment variable: (getenv "HOME")
 (directory-&gt;list dir)    ; return contents of directory as a list of strings (if HAVE_DIRENT_H)
-(system command)         ; execute command
+(system command)         ; execute command, if optional second arg is #t output is returned as a string
 </pre>
 
 <p>But maybe this is not needed; see <a href="#cload">cload.scm</a> below for
@@ -4779,9 +4862,9 @@ A major problem when reading code written for other Schemes is that each Scheme 
 a plethora of idiosyncratic #-names (even special character names), and \ escapes in string
 constants.  *read-error-hook* provides a way to handle these weird cases.  If a #-name
 is encountered that s7 can't deal with, *read-error-hook* is called with two arguments,
- #t and the string representing the constant.  If you set (hook 'result), that result is
+#t and the string representing the constant.  If you set (hook 'result), that result is
 returned to the reader.  Otherwise a 'read-error is raised and you drop into the error handler.
-Similarly, if some bizaare \ use occurs, *read-error-hook* is called with two arguments,
+Similarly, if some bizarre \ use occurs, *read-error-hook* is called with two arguments,
 #f and the offending character.  If you return a character, it is passed to the reader;
 otherwise you get an error.  lint.scm has an example.
 </p>
@@ -5287,6 +5370,8 @@ Currently, the strings involved are assumed to be C strings (don't expect embedd
 to work right in this context).
 </p>
 
+
+
 <pre class="indented">
 (call-with-input-file "s7.c" ; report any lines with "static " but no following open paren
   (lambda (file)
@@ -5301,6 +5386,18 @@ to work right in this context).
 	    (loop (read-line file #t)))))))
 </pre>
 
+
+<div class="separator"></div>
+
+<pre class="indented">
+(<em class=def id="substringuncopied">substring-uncopied</em> str (start 0) end)
+</pre>
+<p>
+<b>substring-uncopied</b> exists because there are cases where you want substring, but don't need a copy made
+of the string.  <code>substring-uncopied</code> does not GC protect the original string, but obviously depends on it; it is intended
+for very brief uses where there is no chance that the GC will be called.  Normally the optimizer can
+find these cases, so for example, there's no need to use <code>substring-uncopied</code> in <code>(string-length (substring str 1))</code>.
+</p>
 
 <div class="separator"></div>
 
@@ -5319,6 +5416,7 @@ is considered to be a part of the symbol name.  A keyword is a constant that eva
 (<em class=def id="symboltable">symbol-table</em>)
 (<em class=def id="symboltovalue">symbol-&gt;value</em> sym (env (curlet)))
 (<em class=def id="symboltodynamicvalue">symbol-&gt;dynamic-value</em> sym)
+(<em class=def id="symbolinitialvalue">symbol-initial-value</em> sym) ; settable
 (<em class=def id="definedp">defined?</em> sym (env (curlet)) ignore-rootlet)
 </pre>
 
@@ -5337,6 +5435,10 @@ is considered to be a part of the symbol name.  A keyword is a constant that eva
 <p>
 <code>symbol-&gt;value</code> returns the value (lexically) bound to the symbol, whereas <code>symbol-&gt;dynamic-value</code>
 returns the value dynamically bound to it.
+</p>
+<p>
+<code>symbol-initial-value</code> is normally the built-in (start up) value of a function, accessed via #_abs for example.
+For other symbols this value can only be set once, and the value should be protected from the GC (s7 does not protect it).
 </p>
 <p>
 <code>symbol-table</code> returns a vector containing the symbols currently in the symbol-table.
@@ -5572,6 +5674,17 @@ the remainder of that clause is spliced into the code as if you had typed it fro
 <em class="gray">(1 2 5 6)</em>
 </pre>
 
+<p>Here is reader-if:
+</p>
+<pre>
+(define-expansion (reader-if test true . false)
+  (let ((test-val (eval test)))
+    (if test-val 
+	true 
+	(and (pair? false)
+	     (car false)))))
+</pre>
+
 
 <!-- from kanren
 (define-syntax conj*
@@ -5644,6 +5757,8 @@ default-random-state          the default arg for random
 most-positive-fixnum          if not using gmp, the most positive integer ("fixnum" comes from CL)
 most-negative-fixnum          as above, but negative
 number-separator              #\null
+symbol-quote?                 #f, so in (quote x) "quote" is a #_quote (a c-function); set to #t to get quote as a symbol
+symbol-printer                #f, a function to print symbols whose names contain unusual character
 
 safety                        0 (see below)
 undefined-identifier-warnings #f 
@@ -5782,6 +5897,10 @@ list will have the entry 'number-separator if s7 was compiled with WITH_NUMBER_S
 (Number separators don't work with bignums).
 </p>
 
+<p>(*s7* 'symbol-printer) is invoked by object-&gt;string when it has to print a symbol whose
+name can normally only be handled by the <a href="#weirdsymbols">symbol</a> function.
+</p>
+
 
 <div class="separator"></div>
 <pre class="indented">
@@ -5839,7 +5958,7 @@ of a c-pointer even if :readable is specified.
 (<em class=def id="treecyclic">tree-cyclic?</em> tree) returns #t if tree contains a cycle.
 (<em class=def id="treeleaves">tree-leaves</em> tree) returns the number of leaves in tree.
 (<em class=def id="treememq">tree-memq</em> obj tree) returns #t if obj is in tree (using eq?).
-(<em class=def id="treesetmemq">tree-set-memq</em> set tree) returns #t if any member of the set (a list of symbols) is in tree.
+(<em class=def id="treesetmemq">tree-set-memq</em> set tree) returns #t if any member of the set (using eq?) is in tree.
 (<em class=def id="treecount">tree-count</em> obj tree) returns how many times obj is in tree.
 </pre>
 
@@ -5936,8 +6055,10 @@ int main(int argc, char **argv)
 <li>s7 is case sensitive.
 <li>when and unless (for r7rs), returning the value of the last form.
 <li>the "d", "f", "s", and "l" exponent markers are not supported by default (use "e", "E", or "@").
-<li>quasiquoted vector constants are not supported (use the normal list expansions wrapped in list-&gt;vector).
+<li>quasiquoted vector constants are not supported (read-time expansions can be used here; see s7test.scm).
 <li><em class=def id="typeof">type-of</em> returns a type indicator for its argument.
+<li>'&lt;datum&gt; is (#_quote &lt;datum&gt;), see <a href="#quotediff">below</a>.
+<li>s7 symbol names can begin with a digit: <code>(define (1+ x) (+ x 1))</code>.
 </ul>
 
 <p>In s7 if a built-in function like gcd is referred to in a function
@@ -6006,7 +6127,7 @@ a mistake and "fixed" it; now I'm having second thoughts).
 <ul style="list-style-type:disc;">
 <li>remove even? and odd?, gcd and lcm.
 <li>remove string-length and vector-length.
-<li>remove list-ref|set!, string-ref|set!, vector-ref|set!, hash-table-ref|set!, set-car!|cdr!, and set-current-output|input|error-port.
+<!-- <li>remove list-ref, list-set!, string-ref, string-set!, vector-ref, vector-set!, hash-table-ref, hash-table-set!, set-car!, set-cdr!, and set-current-*-port. -->
 <li>change file-exists? to file? (or omit it and assume the use of libc.scm &mdash; why reinvent the wheel?).
 <li>remove all the conversion and copy functions like vector-&gt;list and vector-copy (use copy or map).
 <li>change string-&gt;symbol to symbol (what to do with symbol-&gt;string in that case?)
@@ -6047,8 +6168,8 @@ refer to the source, not the destination.  substring should be like subvector, b
 get-output-string should be current-output-string. write-char behaves like display, not write.
 provided? should be feature? or *features* should be *provisions*.
 list-ref, list-set!, and list-tail actually only apply to pairs.
-let-temporarily should be templet, or maybe set-temporarily.  define-expansion should be define-reader-macro, but
-that name collides with reader macros in Common Lisp.
+let-temporarily should be templet, set-temporarily, or maybe just "with".  define-expansion should be define-reader-macro, but
+that name collides with reader macros in Common Lisp.  *cload-directory* should be *cload-path*.
 There should not be two names for the same thing: call/cc and call-with-current-continuation: flush the latter!
 The CL-inspired "log*" names such as logand look very old-fashioned.  Standard scheme opts
 for the name "bitwise*"; why not "integerwise" or "bytevectorwise"?  The "wise" business is just noise; are they thinking of The Hobbit?
@@ -6065,6 +6186,30 @@ of library version symbols when all we actually want is <code>(&gt; version 23.1
 In place of cond-expand, s7 uses <a href="#readercond">reader-cond</a>,
 so the read-time decision involves normal Scheme evaluation.
 </p>
+
+
+<blockquote>
+<div class="indented">
+<p>In the section about cond-expand, the r7rs spec says "If none of the &lt;feature requirement&gt;s evaluate to #t, 
+then if there is an else clause, its &lt;expression&gt;s are included. Otherwise, the cond-expand has no effect."
+I read that to mean that <code>(begin 23 (cond-expand (surreals 1)))</code> should evaluate to 23,
+and <code>(abs -1 (cond-expand (surreals 1)))</code> should be 1.  Currently s7 returns #&lt;unspecified&gt; for the
+first, and an error, "abs: too many arguments: (abs -1 #&lt;unspecified&gt;)" for the second. 
+reader-cond behaves in a way that fits the r7rs spec: <code>(begin 23 (reader-cond ((provided? 'surreals) 1)))</code>
+returns 23, and <code>(abs -1 (reader-cond ((provided? 'surreals) 1)))</code> returns 1, but these examples make
+me unhappy.  Even worse: <code>(define (f a (reader-cond ((provided? 'surreals) b))) a)</code> which adds
+the argument "b" if surreals are provided.
+Maybe reader-cond (and expansions in general) should not magically evaporate in such cases.
+
+(I just noticed that the corrected r7rs.pdf says that the result in cond-expand is unspecified).
+</p>
+<!--
+There's no statement in the r7rs spec that cond-expand can only happen at top-level, and in s7 you can load a
+file into any environment, so there's no way to tell if some code is being spliced in at the top-level, even if
+it's at the top level of the file's code, so it doesn't help to try to restrict reader-cond in that way.
+-->
+</div>
+</blockquote>
 
 <p>Then there's the case case: a case clause without a result appears to be an error in r7rs.
 But the notation used to indicate that is the same as that used for begin,
@@ -6179,11 +6324,11 @@ This is consistent with, for example,
 The standard says "the empty list is a special object of its own type", so surely either choice is
 acceptable in that regard (but, sigh, the standard stupidly goes on to deny that () can evaluate to itself).
 (I'm told that "is an error" means "is not portable" in the standard's weasely abuse of English; if
-they mean "is not portable" why not say so?).
+they mean "is not portable" why not say that?).
 Some of the confusion appears to be caused by the word "list".  I would describe the evaluator: "if it gets a
 constant (and () is a constant) it returns that constant; if a symbol, it returns the value
 associated with that symbol; if a pair, it looks at the pair's
-car to decide what to do".  It's kinda looney to insist on looking at the car of a list when you know () has no car!
+car to decide what to do".
 </p>
 
 <!--
@@ -6209,7 +6354,7 @@ to keep it from being evaluated, but
 #(1 2 3) is as unproblematic as "123" or 123. 
 </p>
 
-<!-- there's another sense in which '() is a constant: you can't apply it to anything. ('() 0) -> error
+<!-- there's another sense in which () is a constant: you can't apply it to anything. (() 0) -> error
 -->
 
 <p>These examples bring up another odd corner of scheme: else.  In <code>(cond (else 1))</code>
@@ -6222,6 +6367,37 @@ I think the best path is to use unlet:
 <code>(let ((else #f)) (cond (#_else 1)))</code>.  This is 1 (not ()) because the initial value of 'else
 can't be changed.
 </p>
+</div>
+
+
+<div class="indented">
+<p id="quotediff">s7 treats <code>'&lt;datum&gt;</code> as <code>(#_quote &lt;datum&gt;)</code> which is not the same as the r7rs standard <code>(quote &lt;datum&gt;)</code>.
+The name 'quote' can be captured by the local context, whereas the function #_quote can't.  Apostrophe should be
+something that does not require you to worry about name capture; the form <code>'a</code> does not contain
+the name 'quote', so it is annoying that its result can be altered by redefining 'quote'.  Here are a few examples
+of the difference (I'm using guile because it is available on this machine):
+</p>
+<pre class="indented">
+(let (' 1) quote)                  ; guile 1, s7 error (#_quote is not a symbol)
+(let ((quote 32)) (length '(1 2))) ; guile error Wrong type to apply: 1, s7 2
+(let ((quote cos)) '0)             ; guile 1, s7 0
+(let ((quote -) (x 1)) 'x)         ; guile -1, s7 x
+(let ('(lambda (x) (+ x 1))) '1)   ; guile 2, s7 error (#_quote is not a symbol)
+((lambda 'x (+ 'x 1)) cos 0)       ; guile 2, s7 error (lambda parameter #_quote is a constant)
+(define-macro (m x) `(length ',x)) (let ((quote 32)) (m (1 2 3))) ; guile "wrong type to apply: 1", s7 3
+</pre>
+<p>
+Perhaps these simple examples will clarify s7's way of handling the apostrophe.
+</p>
+<pre class="indented">
+(syntax? #_quote) -> #t
+(syntax? 'quote) -> #f      ; the symbol quote 
+(equal? quote #_quote) -> #t
+(equal? 'quote quote) -> #f ; quote is not self-evaluating
+(equal? 'quote #_quote) -> #f
+(equal? '#f (quote #f)) -> #t
+</pre>
+<p>If you want the standard scheme approach, <code>(set! (*s7* 'symbol-quote?) #t)</code>.</p>
 </div>
 
 
@@ -6379,7 +6555,7 @@ sequences in its argument, or nil.
 </div>
 
 
-<div class="indented">
+<div id="weirdsymbols" class="indented">
 
 <p>s7 and Snd use "*" in a variable name, *features* for example, to indicate
 that the variable is predefined.  It may occur unprotected in a macro, for
@@ -6432,10 +6608,50 @@ This output is readable, and does not eat up perfectly good
 characters like vertical bar, but it means we can't easily use
 variable names like "| e t c |".  We could allow a name to
 contain any characters if it starts and ends with "|",
-but then one vertical bar is trouble.
+but then one vertical bar is trouble.  We can define a reader
+that turns <code>#symbol&lt;...&gt;</code> into <code>(symbol "...")</code>,
+making it possible to use odd names more widely:
 </p>
+
+<pre class="indented">
+(set! *#readers* 
+      (list (cons #\s 
+		  (lambda (str)
+		    (let ((len (length str)))
+		      (and (string=? (substring str 0 7) "symbol<")
+			   (if (char=? (str (- len 1)) #\&gt;) ; pointless use of #symbol!
+			       (symbol (substring str 7 (- len 1)))
+			       (do ((sym (substring str 7))
+				    (c (read-char) (read-char)))
+				   ((memq c (list #\&gt; #&lt;eof&gt;))
+				    (string-&gt;symbol sym))
+				 (set! sym (string-append sym (string c)))))))))))
+
+&gt; (let ((#symbol&lt;a b c&gt; 32)) (+ #symbol&lt;a b c&gt; 1))
+<em class="gray">33</em>
+</pre>
+
+<p>But there's a problem: if we try to call object-&gt;string with :readable
+on these symbol tokens, it does not know that we want it to use our "#symbol&lt;...&gt;"
+reader-macro.  We need to set the *s7* field <code>'symbol-printer</code>:
+</p>
+
+<pre class="indented">
+&gt; (define f (apply lambda (list () (list 'let (list (list (symbol "a b") 3)) (symbol "a b")))))
+<em class="gray">f</em>
+&gt; (f)
+<em class="gray">3</em>
+&gt; (object-&gt;string f :readable)
+<em class="gray">"(lambda () (let (((symbol \"a b\") 3)) (symbol \"a b\")))"</em> ; not actually readable!
+&gt; (set! (*s7* 'symbol-printer) (lambda (obj) (string-append "#symbol&lt;" (symbol-&gt;string obj) "&gt;")))
+<em class="gray">#&lt;lambda (obj)&gt;</em>
+&gt; (object-&gt;string f :readable)
+<em class="gray">"(lambda () (let ((#symbol&lt;a b&gt; 3)) #symbol&lt;a b&gt;))"</em>
+</pre>
+
+
 <p>
-The symbol function
+The <code>symbol</code> function
 accepts any number of string arguments which it concatenates
 to form the new symbol name.
 </p>
@@ -6609,6 +6825,7 @@ is also unlikely to work.
 </div>
 
 
+<div class="indented">
 <p>Speaking of speed... It is widely believed
 that a Scheme with first class everything can't hope to compete with any
 "real" Scheme.  Humph I say.  Take this little example (which is not 
@@ -6658,6 +6875,9 @@ s7-postlude.scm can be empty.  My version of s7-prelude.scm is:
 (define (jiffies-per-second) 1000)
 (define (current-jiffy) (round (* (jiffies-per-second) (*s7* 'cpu-time))))
 (define (current-second) (floor (*s7* 'cpu-time)))
+(define make-bytevector make-byte-vector)
+(define bytevector-u8-set! byte-vector-set!)
+(set! (*s7* 'symbol-quote?) #t)
 </pre>
 <p>
 If you want to run gcbench, add the define-record-type macro from r7rs.scm.
@@ -6724,21 +6944,22 @@ bench s7 all
 The benchmark compiler.scm assumes that small
 integers can be compared with eq? (via assq), which is incorrect.
 pi.scm and chudnovsky.scm need the gmp version of s7.
+As of 24-Oct-23, s7 treats '&lt;&gt; as (#_quote &lt;&gt;) so dynamic.scm doesn't run, and peval.scm gets the wrong result.
 I ran the bench script on an AMD 3950X machine, and got these results (in seconds):
 ack: 6.6, array1: 6.4, browse: 11.2, bv2string: 4.1, cat: 0.4,
 compiler: 16.9, conform: 30.0, cpstak: 42.8, ctak: 16.6, deriv: 9.7,
 destruc: 8.6, diviter: 3.7, divrec: 4.6, dynamic: 12.6, earley: 25.5,
 equal: 0.3, fft: 12.5, fib: 6.1, fibc: 8.6, fibfp: 1.1, gcbench: 12.9,
-grahps: 72.5, lattice: 63.4, matrix: 21.0, maze: 11.4, mazefun: 9.8,
+graphs: 72.5, lattice: 63.4, matrix: 21.0, maze: 11.4, mazefun: 9.8,
 mbrot: 12.6, mbrotZ: 8.0, mperm: 18.9, nboyer: 20.1, nqueens: 27.0,
 ntakl: 8.0, nucleic: 8.3, paraffins: 4.4, parsing: 20.7, peval: 15.2,
 pnpoly: 9.8, primes: 10.2, puzzle: 10.2, quicksort: 40.0, ray: 8.3,
 read1: 0.2, sboyer: 19.1, scheme: 29.5, simplex: 26.9, slatex: 4.2,
-string: 0.8, sum1: 0.2, sum: 4.1, sumfp: 2.2, tail: 0.1, tak: 7.1,
+string: 0.3, sum1: 0.2, sum: 4.1, sumfp: 2.2, tail: 0.1, tak: 7.1,
 takl: 8.1, triangl: 16.4, wc: 4.9.  In the gmp case, chudnovsky: 0.017, pi: .01.
 </p>
 </div>
-
+</div>
 
 
 <div class="indented">
@@ -6872,8 +7093,8 @@ The examples that follow show:
 <li><a href="#dload">Load a C module dynamically</a>
 <li><a href="#gmpex">gmp and friends</a>
 <li><a href="#gdb">gdb</a>
+<li><a href="#webassembly">WASM</a>
 </ul>
-
 
 
 
@@ -8739,14 +8960,15 @@ the Flint and Arb libraries, flintlib.org and arblib.org.  In Linux:
 
 <pre class="indented">
 gcc -fPIC -c libarb_s7.c
-gcc libarb_s7.o -shared -o libarb_s7.so -lflint -larb
+gcc libarb_s7.o -shared -o libarb_s7.so -lflint
 repl
   &gt; (load "libarb_s7.so" (inlet 'init_func 'libarb_s7_init))
   <em class="gray">#f</em>
   &gt; (acb_bessel_j 0 1.0)
   <em class="gray">7.651976865579665514497175261026632209096E-1</em>
 </pre>
-
+<p>As of January 2024, libarb has been absorbed into libflint 3.0.
+</p>
 
 
 <div class="header" id="gdb"><h4>gdb</h4></div>
@@ -8787,6 +9009,14 @@ replacing bare pointer numbers with their s7 value, wherever possible:
 #11 0x000055555558e903 in copy_stack (sc=0x555555b41eb0, old_v=<b>[sc-&gt;stack] #&lt;stack&gt;</b>) at s7.c:9024
 </pre>
 
+
+<div class="header" id="webassembly"><h4>WASM</h4></div>
+
+<p>s7 can be compiled to web assembly.  There are instructions at
+<a href="https://github.com/actonDev/s7-playground/">s7-playground (Christos Vagias)</a>
+and
+<a href="https://github.com/iainctduncan/s7-wasm">s7-wasm (Iain Duncan)</a>.
+</p>
 
 
 
@@ -8894,6 +9124,25 @@ and so on, then longjmps to unwind the C stack.  If a catch is found, its error 
 of execution.
 </p>
 
+<p>s7 has an internal debugger that checks everything for consistency.  If you're writing C code that
+calls the s7.h functions a lot, it is sometimes helpful to turn on this debugger by adding the
+-DS7_DEBUGGING=1 compiler flag.  s7 will run 10 to 20 times slower, but it will complain loudly
+about anything it doesn't expect.  
+The internal debugger normally calls abort whenever it detects some error, so it's most convenient
+to run s7 in gdb if this flag is on.
+S7_DEBUGGING also provides various debugging functions that
+can be called from gdb.  By far the most useful is display.  It takes two arguments, the s7_scheme
+pointer to the currently running interpreter, and the object you want to display.  For much more
+detail, there is object_to_let_p_p.  If you're trying to look at a scheme object and have only
+its name in scheme code, use s7_name_to_value.  heap_scan, heap_analyze, and heap holders provide
+a view of the heap.  The scheme function (*s7* 'memory-usage) might also be useful in
+this context.
+s7_show_stack returns a brief list of the current Scheme stack.
+Due to tail calls and whatnot, the s7 stack is not as informative as the equivalent C stack would be.
+The s7 file <a href="#gdb">gdbinit</a> has a few gdb functions that might be helpful.  See also
+(*s7* 'history).
+</p>
+
 
 <div class="shortheader" id="cgcprotection">GC protection</div>
 
@@ -8919,6 +9168,7 @@ void s7_gc_unprotect_at(s7_scheme *sc, s7_int loc);
 s7_pointer s7_gc_protected_at(s7_scheme *sc, s7_int loc);
 
 s7_pointer s7_gc_protect_via_stack(s7_scheme *sc, s7_pointer x);
+s7_pointer s7_gc_protect_2_via_stack(s7_scheme *sc, s7_pointer x, s7_pointer y);
 s7_pointer s7_gc_unprotect_via_stack(s7_scheme *sc, s7_pointer x);
 
 s7_pointer s7_gc_protect_via_location(s7_scheme *sc, s7_pointer x, s7_int loc);
@@ -8946,7 +9196,8 @@ s7_cons(s7, s7_make_real(s7, 3.14),
 <p>The protect_via_stack functions place the object on the s7 stack where it is
 protected until the stack unwinds past that point.  Besides speed, this provides
 a way to be sure an object is unprotected even in some complicated situation where
-error handling may bypass an explicit s7_gc_unprotect_at call.
+error handling may bypass an explicit s7_gc_unprotect_at call.  s7_gc_protect_2_via_stack
+protects two objects in one stack location, saving stack space.
 The protect_via_location are intended for cases where you have a location already
 (from s7_gc_protect), and want to reuse it for a different object.
 s7_gc_on turns the GC on or off.  Objects can be created at a blistering pace,
@@ -9114,7 +9365,7 @@ s7_eval evaluates a list that represents Scheme code.  That is,
 s7_eval(sc, s7_cons(sc, s7_make_symbol(sc, "+"),
                s7_cons(sc, s7_make_integer(sc, 1),
                   s7_cons(sc, s7_make_integer(sc, 2), s7_nil(sc)))),
-            s7_rootlet(sc));   /* s7_nil here is the same as s7_rootlet */
+            s7_rootlet(sc));
 </pre>
 <p>returns 3 (as a Scheme integer).  This may look ridiculous, but see snd-sig.c for an actual use.
 s7_eval_c_string evaluates a Scheme expression presented to it as a C string; it combines read and
@@ -9652,6 +9903,8 @@ s7_pointer s7_name_to_value(s7_scheme *sc, const char *name);
 s7_pointer s7_symbol_value(s7_scheme *sc, s7_pointer sym);
 s7_pointer s7_symbol_set_value(s7_scheme *sc, s7_pointer sym, s7_pointer val);
 s7_pointer s7_symbol_local_value(s7_scheme *sc, s7_pointer sym, s7_pointer local_env);
+s7_pointer s7_symbol_initial_value(s7_pointer symbol); /* #_symbol's value */
+s7_pointer s7_symbol_set_initial_value(s7_scheme *sc, s7_pointer symbol, s7_pointer value);
 
 s7_pointer s7_symbol_table_find_name(s7_scheme *sc, const char *name);
 bool s7_for_each_symbol_name(s7_scheme *sc, bool (*symbol_func)(const char *symbol_name, void *data), void *data);
@@ -9809,8 +10062,11 @@ s7_pointer s7_memq(s7_scheme *sc, s7_pointer obj, s7_pointer x);
 bool s7_tree_memq(s7_scheme *sc, s7_pointer sym, s7_pointer tree);
 </pre>
 <p>These functions are mostly obvious: s7_car corresponds to scheme car, etc.
-s7_list_nl was added to catch a typo that affected s7_list: the latter would accept
-trailing, but ignored list values.  s7_tree_memq is like s7_memq, but searches
+s7_list_nl is a version of s7_list. s7_list will accept a list of arguments that does
+not fill the list (that is, "num_values" does not match the actual number of values),
+leaving null pointers that will later wreak havoc.  The list of arguments to s7_list_nl on the other hand must be
+null-terminated, and must match "num_values", or you'll get an error.
+s7_tree_memq is like s7_memq, but searches
 an entire tree structure. not just the top-level list.  s7_array_to_list takes
 an array of s7_pointers and returns a list of them (similar to s7_vector_to_list).
 </p>
@@ -9896,6 +10152,7 @@ void *s7_c_pointer(s7_pointer p);
 void *s7_c_pointer_with_type(s7_scheme *sc, s7_pointer p, s7_pointer expected_type, const char *caller, s7_int argnum);
 s7_pointer s7_make_c_pointer(s7_scheme *sc, void *ptr);
 s7_pointer s7_make_c_pointer_with_type(s7_scheme *sc, void *ptr, s7_pointer type, s7_pointer info);
+s7_pointer s7_make_c_pointer_wrapper_with_type(s7_scheme *sc, void *ptr, s7_pointer type, s7_pointer info);
 s7_pointer s7_c_pointer_type(s7_pointer p);
 </pre>
 <p>These functions are equivalent to s7's c-pointer?, c-pointer, and c-pointer-type.
@@ -9908,6 +10165,8 @@ s7_c_pointer_with_type combines s7_c_pointer with s7_is_c_pointer_of_type,
 calling s7_error if the types don't match.
 Nothing else in s7 assumes the type field is actually a type symbol, so you
 can use the type and info fields for any purpose.
+s7_make_c_pointer_wrapper_with_type is akin to s7_make_string_wrapper (see below).
+It creates a temporary c_pointer object outside the heap and GC.
 </p>
 
 
@@ -10197,6 +10456,8 @@ calling values or s7_values.  (values) returns a special object that is eq? to
 #&lt;unspecified&gt; but not C == to it (that is, there are two things in s7 that
 represent the unspecified object, one being the result of calling values with no
 arguments).  (values obj) returns obj, which is not considered a multiple-value.
+Don't use s7_values in the new code portion of a C-side scheme macro definition
+(one from s7_define_macro).  Use the symbol 'values instead.
 </p>
 <p>s7_is_valid is a debugging aid; it tries to tell if an arbitrary value is pointing to
 an s7 object.  Set the compile-time switch TRAP_SEGFAULT to 1 before using this function!

@@ -196,9 +196,58 @@
 	     v)))))))
 
 (define (combine-latest)
-  (let ((file-names (list "v-index" "v-mac" "v-peak" "v-eq" "v-fft" "v-ref" "v-auto" "v-test" "v-cop"
-			  "v-lt" "v-form" "v-read" "v-map" "v-lg" "v-iter" "v-sort" "v-hash" "v-gen"
-			  "v-all" "v-call" "v-dup" "v-set" "v-clo" "v-rec" "v-sg" "v-big")))
+  (let ((file-names (list 
+		     "v-index"
+		     "v-mac"
+		     "v-peak"
+		     "v-vect"
+		     "v-eq"
+		     "v-fft"
+		     "v-ref"
+		     "v-auto"
+		     "v-test"
+		     "v-cop"
+		     "v-lt"
+		     "v-form"
+		     "v-read"
+		     "v-map"
+		     "v-mat"
+		     "v-misc"
+		     "v-iter"
+		     "v-sort"
+		     "v-let"
+		     "v-hash"
+		     "v-gen"
+		     "v-all"
+		     "v-call"
+		     "v-sg"
+		     "v-dup"
+		     "v-set"
+		     "v-rec"
+		     "v-clo"
+		     "v-big"
+		     "v-shoot"
+		     "v-fb"
+		     "v-rclo"
+		     "v-case"
+		     ;"v-b"
+		     "v-io"
+		     "v-gc"
+		     "v-num"
+		     "v-mock"
+		     "v-str"
+		     "v-gsl"
+		     "v-list"
+		     "v-load"
+		     "v-cb"
+		     "v-ari"
+		     "v-exit"
+		     "v-left"
+		     "v-obj"
+		     "v-imp"
+		     "v-lamb"
+		     "v-hook"
+		     "v-star")))
     (define (next-file f)
       (let ((name (system (format #f "ls -t ~A*" f) #t)))
 	(let ((len (length name)))
@@ -265,11 +314,12 @@
 		     ("tmap.scm" . "/home/bil/motif-snd/v-map85")
 		     ("tmat.scm" . "/home/bil/motif-snd/v-mat85")
 		     ("tmisc.scm" . "/home/bil/motif-snd/v-misc85")
-		     ("lg.scm" . "/home/bil/motif-snd/v-lg85")
 		     ("titer.scm" . "/home/bil/motif-snd/v-iter85")
 		     ("tsort.scm" . "/home/bil/motif-snd/v-sort85")
 		     ("tlet.scm" . "/home/bil/motif-snd/v-let85")
 		     ("thash.scm" . "/home/bil/motif-snd/v-hash85")
+		     ("tmap-hash.scm" . "/home/bil/motif-snd/v-map-hash85")
+                     ("tmv.scm" . "/home/bil/motif-snd/v-mv85")
 		     ("tgen.scm" . "/home/bil/motif-snd/v-gen85")
 		     ("tall.scm" . "/home/bil/motif-snd/v-all85")
 		     ("snd-test.scm" . "/home/bil/motif-snd/v-call85")
@@ -283,7 +333,7 @@
 		     ("fbench.scm" . "/home/bil/motif-snd/v-fb85")
 		     ("trclo.scm" . "/home/bil/motif-snd/v-rclo85")
 		     ("tcase.scm" . "/home/bil/motif-snd/v-case85")
-		     ("test-all.scm" . "/home/bil/motif-snd/v-b85")
+		     ;("test-all.scm" . "/home/bil/motif-snd/v-b85")
 		     ("tio.scm" . "/home/bil/motif-snd/v-io85")
 		     ("tgc.scm" . "/home/bil/motif-snd/v-gc85")
 		     ("tnum.scm" . "/home/bil/motif-snd/v-num85")

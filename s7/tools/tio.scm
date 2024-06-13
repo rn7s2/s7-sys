@@ -2,41 +2,110 @@
 
 (define fsize 100000)
 (define ssize 500000)
+(define ssize/2 250000)
 
-(define (wis)
-  (with-input-from-string "asdf"
-    (lambda ()
-      (unless (eqv? (read-char) #\a)
-	(format *stderr* "read-char trouble\n"))
-      (unless (eqv? (read-char) #\s)
-	(format *stderr* "read-char trouble\n"))
-      (unless (eqv? (read-char (current-input-port)) #\d)
-	(format *stderr* "current-input-port trouble\n")))))
+(if (or (> (*s7* 'major-version) 10) 
+	(and (= (*s7* 'major-version) 10) (>= (*s7* 'minor-version) 9)))
+    (begin
+      (define (call-new-wis)
+	(let ((p (open-input-string "asdf")))
+	  (do ((i 0 (+ i 1)))
+	      ((= i ssize/2))
+	    (set! (port-string p) "asdf")
+	    (unless (char=? (read-char p) #\a)
+	      (format *stderr* "read-char trouble\n"))
+	    (unless (char=? (read-char p) #\s)
+	      (format *stderr* "read-char trouble\n"))
+	    (unless (char=? (read-char p) #\d)
+	      (format *stderr* "read-char trouble\n")))
+	  (close-input-port p)))
+      
+      (define (call-new-cwis) 
+	(let ((p (open-input-string "asdf"))
+	      (a (char->integer #\a))
+	      (s (char->integer #\s)))
+	  (do ((i 0 (+ i 1)))
+	      ((= i ssize/2))
+	    (set! (port-string p) "asdf")
+	    (unless (= (read-byte p) a)
+	      (format *stderr* "call read-char trouble\n"))
+	    (unless (= (read-byte p) s)
+	      (format *stderr* "call read-char trouble\n"))
+	    (unless (= (port-position p) 2)
+	      (format *stderr* "cwis position: ~A~%" (port-position p))))
+	  (close-input-port p)))
 
-(define (call-wis) 
-  (do ((i 0 (+ i 1)))
-      ((= i ssize))
-    (wis)))
+      ;; include the old cases
+      (define (wis)
+	(with-input-from-string "asdf"
+	  (lambda ()
+	    (unless (char=? (read-char) #\a)
+	      (format *stderr* "read-char trouble\n"))
+	    (unless (char=? (read-char) #\s)
+	      (format *stderr* "read-char trouble\n"))
+	    (unless (char=? (read-char (current-input-port)) #\d)
+	      (format *stderr* "current-input-port trouble\n")))))
+      
+      (define (call-wis) 
+	(do ((i 0 (+ i 1)))
+	    ((= i ssize/2))
+	  (wis)))
+      
+      (define cwis
+	(let ((a (char->integer #\a))
+	      (s (char->integer #\s)))
+	  (lambda ()
+	    (call-with-input-string "asdf"
+	      (lambda (p)
+		(if (port-closed? p)
+		    (format *stderr* "cwis port closed\n"))
+		(unless (= (read-byte p) a)
+		  (format *stderr* "call read-char trouble\n"))
+		(unless (= (read-byte p) s)
+		  (format *stderr* "call read-char trouble\n"))
+		(unless (= (port-position p) 2)
+		  (format *stderr* "cwis position: ~A~%" (port-position p))))))))
+      
+      (define (call-cwis) 
+	(do ((i 0 (+ i 1)))
+	    ((= i ssize/2))
+	  (cwis))))
 
-(define cwis
-  (let ((a (char->integer #\a))
-	(s (char->integer #\s)))
-    (lambda ()
-      (call-with-input-string "asdf"
-	(lambda (p)
-	  (if (port-closed? p)
-	      (format *stderr* "cwis port closed\n"))
-	  (unless (eqv? (read-byte p) a)
-	    (format *stderr* "call read-char trouble\n"))
-	  (unless (eqv? (read-byte p) s)
-	    (format *stderr* "call read-char trouble\n"))
-	  (unless (= (port-position p) 2)
-	    (format *stderr* "cwis position: ~A~%" (port-position p))))))))
-
-(define (call-cwis) 
-  (do ((i 0 (+ i 1)))
-      ((= i ssize))
-    (cwis)))
+    (begin
+      (define (wis)
+	(with-input-from-string "asdf"
+	  (lambda ()
+	    (unless (char=? (read-char) #\a)
+	      (format *stderr* "read-char trouble\n"))
+	    (unless (char=? (read-char) #\s)
+	      (format *stderr* "read-char trouble\n"))
+	    (unless (char=? (read-char (current-input-port)) #\d)
+	      (format *stderr* "current-input-port trouble\n")))))
+      
+      (define (call-wis) 
+	(do ((i 0 (+ i 1)))
+	    ((= i ssize))
+	  (wis)))
+      
+      (define cwis
+	(let ((a (char->integer #\a))
+	      (s (char->integer #\s)))
+	  (lambda ()
+	    (call-with-input-string "asdf"
+	      (lambda (p)
+		(if (port-closed? p)
+		    (format *stderr* "cwis port closed\n"))
+		(unless (= (read-byte p) a)
+		  (format *stderr* "call read-char trouble\n"))
+		(unless (= (read-byte p) s)
+		  (format *stderr* "call read-char trouble\n"))
+		(unless (= (port-position p) 2)
+		  (format *stderr* "cwis position: ~A~%" (port-position p))))))))
+      
+      (define (call-cwis) 
+	(do ((i 0 (+ i 1)))
+	    ((= i ssize))
+	  (cwis)))))
 
 (define (wif)
   (with-input-from-file "t923.scm"
@@ -67,32 +136,79 @@
     (cwif)))
 
 
-(define (wos)
-  (with-output-to-string
-    (lambda ()
-      (write-char #\a)
-      (write-char #\b)
-      (flush-output-port (current-output-port))
-      (unless (string=? (get-output-string (current-output-port)) "ab")
-	(format *stderr* "write-char trouble\n")))))
+(if (or (> (*s7* 'major-version) 10) 
+	(and (= (*s7* 'major-version) 10) (>= (*s7* 'minor-version) 9)))
+    (begin
+      (define (call-new-wos)
+	(let ((p (open-output-string)))
+	  (do ((i 0 (+ i 1)))
+	      ((= i ssize/2))
+	    (set! (port-string p) "ab")
+	    (unless (string=? (get-output-string p) "ab")
+	      (format *stderr* "write-char trouble\n")))
+	  (close-output-port p)))
 
-(define (call-wos) 
-  (do ((i 0 (+ i 1)))
-      ((= i ssize))
-    (wos)))
+      (define (call-new-cwos)
+	(let ((p (open-output-string)))
+	  (do ((i 0 (+ i 1)))
+	      ((= i ssize/2))
+	    (set! (port-string p) "asdf")
+	    (unless (string=? (get-output-string p) "asdf")
+	      (format *stderr* "call write-string trouble\n")))))
 
-(define (cwos)
-  (call-with-output-string
-    (lambda (p)
-      (write-string "asdf" p)
-      (flush-output-port p)
-      (unless (string=? (get-output-string p) "asdf")
-	(format *stderr* "call write-string trouble\n")))))
-
-(define (call-cwos) 
-  (do ((i 0 (+ i 1)))
-      ((= i ssize))
-    (cwos)))
+      (define (wos)
+	(with-output-to-string
+	  (lambda ()
+	    (write-char #\a)
+	    (write-char #\b)
+	    (flush-output-port (current-output-port))
+	    (unless (string=? (get-output-string (current-output-port)) "ab")
+	      (format *stderr* "write-char trouble\n")))))
+      
+      (define (call-wos) 
+	(do ((i 0 (+ i 1)))
+	    ((= i ssize/2))
+	  (wos)))
+      
+      (define (cwos)
+	(call-with-output-string
+	 (lambda (p)
+	   (write-string "asdf" p)
+	   (flush-output-port p)
+	   (unless (string=? (get-output-string p) "asdf")
+	     (format *stderr* "call write-string trouble\n")))))
+      
+      (define (call-cwos) 
+	(do ((i 0 (+ i 1)))
+	    ((= i ssize/2))
+	  (cwos))))
+    (begin
+      (define (wos)
+	(with-output-to-string
+	  (lambda ()
+	    (write-char #\a)
+	    (write-char #\b)
+	    (flush-output-port (current-output-port))
+	    (unless (string=? (get-output-string (current-output-port)) "ab")
+	      (format *stderr* "write-char trouble\n")))))
+      
+      (define (call-wos) 
+	(do ((i 0 (+ i 1)))
+	    ((= i ssize))
+	  (wos)))
+      
+      (define (cwos)
+	(call-with-output-string
+	 (lambda (p)
+	   (write-string "asdf" p)
+	   (flush-output-port p)
+	   (unless (string=? (get-output-string p) "asdf")
+	     (format *stderr* "call write-string trouble\n")))))
+      
+      (define (call-cwos) 
+	(do ((i 0 (+ i 1)))
+	    ((= i ssize))
+	  (cwos)))))
 
 (define (wof)
   (with-output-to-file "/dev/null"
@@ -216,6 +332,13 @@
 (call-wof)
 (call-cwof)
 
+(when (or (> (*s7* 'major-version) 10) 
+	  (and (= (*s7* 'major-version) 10) (>= (*s7* 'minor-version) 9)))
+  (call-new-wis)
+  (call-new-cwis)
+  (call-new-wos)
+  (call-new-cwos))
+
 (call-with-output-file "t923.scm"
   (lambda (p)
     (display "asdf\n" p)
@@ -229,11 +352,7 @@
 
 ;(call-funcs)
 
-;(gc) (gc)
-;(set! (*s7* 'print-length) 123123123)
-;(display (*s7* 'memory-usage)) (newline)
 ;(when (> (*s7* 'profile) 0) (show-profile 200))
-
 (exit)
 
 ;; this is dominated by fopen, fwrite, and fclose -- mallocs everywhere!, so I multiplied the string ports by 5

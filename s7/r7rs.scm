@@ -77,7 +77,7 @@
 (define char-foldcase char-downcase) 
 (define string-foldcase string-downcase)
 ;;; these and the string functions in s7 are not unicode-aware.  To get true unicode
-;;;   handling of the bytes, use the glib functions in libxg or use cload (see xgdata.scm).
+;;;   handling of the bytes, use libutf8proc.scm, the glib functions in libxg or use cload (see xgdata.scm).
 (define (digit-value c) (and (char-numeric? c) (- (char->integer c) (char->integer #\0))))
 
 
@@ -206,14 +206,23 @@
 
 (define interaction-environment curlet)
 ;; for null-environment see stuff.scm
+
 (define-macro (include . files) 
   `(begin
      ,@(map (lambda (file)
 	      `(load ,file (outlet (curlet))))
 	    files)))
+;; according to someone, this should insert the text from the included files directly into the loader input stream, perhaps:
+;; (let ((old-string (port-string (current-input-port))) ; do we need to start at port-position?
+;;       (new-string (let ((f (open-input-file file)))
+;;                     (let ((str (port-string f))) ; since it's actually a string port?
+;;                       (close-input-port f)
+;;                       str))))
+;;   (set! (port-string (current-input-file)) (string-append new-string old-string)))
+;; but this is alien to lisp, and even in C it's a horrible kludge -- why did the r7rs committee accept such crap?
 
 (set! *#readers* (cons (cons #\; (lambda (s) (read) (values))) *#readers*))
-;; I prefer (define-expansion (comment . stuff) (reader-cond (#t (values))))
+;; I prefer (define-expansion (comment . stuff) (values))
 ;;   or (format #f "~^ this is a comment ")
 
 
@@ -496,7 +505,7 @@
 ;; records
 (define-macro (define-record-type type make ? . fields)
   (let ((obj (gensym))
-	(typ (gensym))
+	(typ (gensym)) ; this means each call on this macro makes a new type
 	(args (map (lambda (field)
 		     (values (list 'quote (car field))
 			     (let ((par (memq (car field) (cdr make))))
@@ -528,6 +537,28 @@
 
 ;;; srfi 111:
 (define-record-type box-type (box value) box? (value unbox set-box!))
+
+;;; as per the comment above,
+;;; <1> (load "r7rs.scm")
+;;;   box-type
+;;; <2> (define b1 (box 32))
+;;;   (inlet '{gensym}-1 box-type 'value 32)
+;;; <3> (define-record-type box-type (box value) box? (value unbox set-box!))
+;;;   box-type
+;;; <4> (define b2 (box 32))
+;;;   (inlet '{gensym}-3 box-type 'value 32)
+;;; <5> (box? b1)
+;;;   #f
+;;; <6> (box? b2)
+;;;   #t
+;;; but, of course:
+;;; <7> (define b3 (box 32))
+;;;  (inlet '{gensym}-3 box-type 'value 32)
+;;; <8> (equal? b2 b3)
+;;;  #t
+;;; <9> (box? b3)
+;;;  #t
+
 
 #|
 ;(require stuff.scm)

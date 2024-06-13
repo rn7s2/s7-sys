@@ -1,10 +1,3 @@
-(when (provided? 'pure-s7)
-  (define (vector-fill! vect val . args)
-    (if (vector? vect)
-	(apply fill! vect val args)
-	(error 'wrong-type-arg "vector-fill! argument should be a vector: ~A" str))))
-
-
 (set! (*s7* 'heap-size) (* 12 1024000))
 
 (define (reader)
@@ -52,6 +45,8 @@
 
 ;;; ----------------------------------------
 
+(define global-val 0) ; for reader-cond in s7test.scm
+
 (let ()
   (define (walk p counts)
     (if (pair? p)
@@ -85,14 +80,16 @@
 ;;; ----------------------------------------
 
 (let ()
-  (define (hash-ints)
+  (define (hash-ints calls)
     (let ((counts (make-hash-table)))
       (do ((i 0 (+ i 1))
 	   (z (random 100) (random 100)))
-	  ((= i 5000000) counts)
+	  ((= i calls) i)
 	(hash-table-set! counts z (+ (or (hash-table-ref counts z) 0) 1)))))
 
-  (hash-ints))
+  (let ((val (hash-ints 5000000)))
+    (unless (= val 5000000)
+      (format *stderr* "thash hash-ints: ~S?~%" val))))
 
 
 ;;; ----------------------------------------
@@ -112,7 +109,7 @@
 	  (display "oops")))
     (for-each (lambda (key&value)
 		(unless (= (car key&value) (cdr key&value))
-		  (display "oops"))) ;(format *stderr* "hash iter ~A~%" key&value)))
+		    (display "oops"))) ;(format *stderr* "hash iter ~A~%" key&value)))
 	      (make-iterator int-hash p))
     (set! int-hash #f)))
 
@@ -205,6 +202,12 @@
       (unless (= i (hash-table-ref any-hash (vector-ref strings i)))
 	  (display "oops")))
     (set! any-hash #f)))
+
+(when (provided? 'pure-s7)
+  (define (vector-fill! vect val . args)
+    (if (vector? vect)
+	(apply fill! vect val args)
+	(error 'wrong-type-arg "vector-fill! argument should be a vector: ~A" str))))
 
 (define (test9 size)
   (let ((any-hash1 (make-hash-table size eq?)))

@@ -89,7 +89,7 @@
 ;;; --------------------------------------------------------------------------------
 
 (define (cat)
-  (let ((inport (open-input-file "/home/bil/cl/all-lg-results"))
+  (let ((inport (open-input-file "/home/bil/cl/s7test.scm"))
 	(outport (open-output-file "/dev/null"))) 
     (catch #t
       (lambda ()
@@ -99,7 +99,9 @@
 	(close-input-port inport)
 	(close-output-port outport)))))
 
-(cat)
+(do ((i 0 (+ i 1)))
+    ((= i 12))
+  (cat))
 
 ;;; --------------------------------------------------------------------------------
 
@@ -116,7 +118,7 @@
 		 (substring s (quotient (string-length s) 2))
 		 (substring s 0 (+ 1 (quotient (string-length s) 2)))))))))
 
-(display (string-cat 600000)) (newline) ; 524278
+(display (string-cat 500000)) (newline) ; 524278
 
 ;;; --------------------------------------------------------------------------------
 
@@ -259,7 +261,7 @@
 	   primes)
 	(if (prime? i)
 	    (set! primes (+ primes 1))))))
-  (display (count-primes 300000)) (newline)) ; 100000: 9592, 200000: 17984, 30000: 25997
+  (display (count-primes 300000)) (newline)) ; 100000: 9592, 200000: 17984, 300000: 25997
 
 ;;; --------------------------------------------------------------------------------
 ;;;

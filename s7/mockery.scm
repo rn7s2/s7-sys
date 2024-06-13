@@ -22,6 +22,18 @@
 ;;;  
 ;;;  There are examples scattered around this file, and a lot more
 ;;;  in s7test.scm.
+;;;
+;;; currently it is possible to (set! ((*mock-vector* 'mock-vector-class) 'write) hash-table-set!) [or (set! (v 'write) hash-table-set!) I think]
+;;;   should we call the s7.html vars-immutable (and immutable!) on this internal let?
+;;; to create an immutable mock datum, call immutable! on its value:
+;;;   (define-constant L (let ((tmp ((*mock-pair* 'mock-pair) 1 2))) (immutable! (tmp 'value)) tmp))
+;;;
+;;; also we omit a variety of built-in functions that can work on the underlying value.
+;;;   given (define v #(0 1)) and (define mv ((*mock-vector* 'mock-vector) 0 1))
+;;;     (arity v): '(1 . 536870912), (arity mv): '(1 . 1)
+;;;     (signature v): '(#t vector? . #1=(integer? . #1#)), (signature mv): '(#t let? . #1=(symbol? . #1#))
+;;;     object->let but this needs to be omitted for debugging
+;;;     and many where the error message is different (should pretty-print know about these?)
 
 (provide 'mockery.scm)
 
@@ -96,6 +108,19 @@
 	    (let-temporarily (((*s7* 'openlets) #f)) 
 	      (apply func (reverse! new-args)))))))
 
+
+  (define (append-wrapper . args)
+    ;;  append is odd -- if 0 args -> (), 1 arg -> arg, 2 args and first is (), return arg2(etc), else (apply #_append args-via-values)?
+    ;;    we can get here with 0 args via: (with-let (*mock-vector* 'mock-vector-class) (append)) !
+    (if (null? args)
+	()
+	(if (null? (cdr args)) 
+	    (car args) ; presumably a mock object
+	    (if (and (null? (car args))  ; etc...
+		     (null? (cddr args)))
+		(cadr args)
+		(apply (with-mock-wrapper* #_append) args)))))
+
   ;; one tricky thing here is that a mock object can be the let of with-let: (with-let (mock-port ...) ...)
   ;;   so a mock object's method can be called even when no argument is a mock object.  Even trickier
   ;;   (display (openlet (with-let (mock-c-pointer 0) (lambda () 1))))
@@ -154,8 +179,15 @@
 		       'byte-vector?       (with-mock-wrapper #_byte-vector?)
 		       'float-vector?      (with-mock-wrapper #_float-vector?)
 		       'length             (with-mock-wrapper #_length)
-		       'vector-append      (with-mock-wrapper* #_vector-append)
-		       'append             (with-mock-wrapper* #_append)
+		       'vector-append      (if (provided? 'pure-s7)
+					       (lambda args
+						 (if (null? args) 
+						     #() 
+						     (if (vector? (car args))
+							 (apply append args)
+							 (error 'wrong-type-arg "vector-append arguments should be vectors: ~A" args))))
+					       (with-mock-wrapper* #_vector-append))
+		       'append             append-wrapper ;(with-mock-vector #_append)
 		       'vector-typer       (with-mock-wrapper #_vector-typer)
 		       'class-name         '*mock-vector*)))
 	  
@@ -178,6 +210,7 @@
 	  
 	  (curlet)))
 
+;;; perhaps mock-float-vector etc?
 
 #|
   ;; vector that grows to accommodate vector-set!
@@ -252,7 +285,7 @@
 		       'copy               (with-mock-wrapper* #_copy)
 		       'hash-table?        (with-mock-wrapper #_hash-table?)
 		       'length             (with-mock-wrapper #_length)
-		       'append             (with-mock-wrapper* #_append)
+		       'append             append-wrapper ;(with-mock-wrapper* #_append)
 		       'hash-table-key-typer (with-mock-wrapper #_hash-table-key-typer)
 		       'hash-table-value-typer (with-mock-wrapper #_hash-table-value-typer)
 		       'class-name         '*mock-hash-table*)))
@@ -384,7 +417,7 @@
 		       'string-ci>=?           (with-mock-wrapper* #_string-ci>=?)
 		       'string?                (with-mock-wrapper #_string?)
 		       'length                 (with-mock-wrapper (if (provided? 'pure-s7) #_length #_string-length))
-		       'append                 (with-mock-wrapper* #_append)
+		       'append                 append-wrapper ;(with-mock-wrapper* #_append)
 		       'class-name             '*mock-string*)))
 	  
 	  (define* (make-mock-string len (init #\null))
@@ -522,7 +555,7 @@
 		 'negative?        (with-mock-wrapper #_negative?)
 		 'infinite?        (with-mock-wrapper #_infinite?)
 		 'nan?             (with-mock-wrapper #_nan?)
-		 ;'append           (with-mock-wrapper* #_append) ;?? (append ... 3 ...) is an error
+		 ;'append          append-wrapper ; (with-mock-wrapper* #_append) ;?? (append ... 3 ...) is an error
 		 'magnitude        (with-mock-wrapper #_magnitude)
 		 'angle            (with-mock-wrapper #_angle)
 		 'rationalize      (with-mock-wrapper* #_rationalize)
@@ -586,6 +619,7 @@
 
 		 'make-rectangular (with-mock-wrapper* #_complex)
 		 'complex          (with-mock-wrapper* #_complex)
+		 'bignum           (with-mock-wrapper* #_bignum)
 		 'random-state     (with-mock-wrapper* #_random-state)
 		 'ash              (with-mock-wrapper* #_ash)
 		 'logbit?          (with-mock-wrapper* #_logbit?)
@@ -632,6 +666,7 @@
 		 'subvector        (with-mock-wrapper* #_subvector)
 		 'read-string      (with-mock-wrapper* #_read-string)
 		 'length           (with-mock-wrapper #_length)
+		 'c-pointer        (with-mock-wrapper #_c-pointer)
 		 'class-name       '*mock-number*)))
 	  
 	  (define (mock-number x)
@@ -861,13 +896,13 @@
 		       'list-set!        (with-mock-wrapper* #_list-set!)
 		       'pair?            (with-mock-wrapper #_pair?)
 		       'length           (with-mock-wrapper #_length)
-		       'append           (with-mock-wrapper* #_append)
+		       'append           append-wrapper ;(with-mock-wrapper* #_append)
 		       'class-name       '*mock-pair*)))
 	  
 	  (define (mock-pair . args)
 	    (openlet
 	     (sublet (*mock-pair* 'mock-pair-class)
-	       'value (copy args)
+	       'value (copy args) ; i.e. like list not cons
 	       'mock-type 'mock-pair?)))
 	  
 	  (set! mock-pair? (lambda (obj)
@@ -969,6 +1004,7 @@
 		       'write           (with-mock-wrapper* #_write)
 		       'display         (with-mock-wrapper* #_display)
 		       'fill!           (with-mock-wrapper* #_fill!)
+		       'class-name      '*mock-c-pointer*
 		       )))
 	  
 	  (define* (mock-c-pointer (int 0) type info weak1 weak2)
@@ -999,6 +1035,7 @@
 		       'format             (with-mock-wrapper* #_format)
 		       'write              (with-mock-wrapper* #_write)
 		       'display            (with-mock-wrapper* #_display)
+		       'class-name         '*mock-random-state*
 		       )))
 	  
 	  (define* (mock-random-state seed (carry 1675393560))
@@ -1030,6 +1067,7 @@
 		       'format            (with-mock-wrapper* #_format)
 		       'write             (with-mock-wrapper* #_write)
 		       'display           (with-mock-wrapper* #_display)
+		       'class-name        '*mock-iterator*
 		       )))
 	  
 	  (define (make-mock-iterator . args)
@@ -1057,7 +1095,7 @@
 		       'output-port?        (with-mock-wrapper #_output-port?)
 		       'port-closed?        (with-mock-wrapper #_port-closed?)
 		       'equivalent?         (with-mock-wrapper* #_equivalent?)
-		       ;'append              (with-mock-wrapper* #_append) ; ?? (append (open-input-string "asdf")...) is an error
+		       ;'append              (with-mock-wrapper* #_append) ; ?? (append (open-input-string "asdf") ...) is an error
 		       'set-current-output-port (with-mock-wrapper #_set-current-output-port)
 		       'set-current-input-port  (with-mock-wrapper #_set-current-input-port)
 		       'set-current-error-port  (with-mock-wrapper #_set-current-error-port)

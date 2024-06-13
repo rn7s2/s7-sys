@@ -7,6 +7,26 @@
   (format *stderr* "this won't work in Snd!~%")
   (exit))
 
+(define baddies '(exit emergency-exit abort autotest s7-optimize dynamic-unwind
+		  all delete-file system set-cdr! stacktrace test-sym
+		  cutlet varlet gc cond-expand reader-cond
+		  openlet coverlet eval vector list cons values hash-table
+		  symbol-table load throw error
+		  make-rectangular macro macro* bacro bacro*
+		  copy fill! hash-table-set! vector-set! let-set! list-values apply-values immutable!
+		  *unbound-variable-hook* *load-hook* *rootlet-redefinition-hook* *missing-close-paren-hook* *read-error-hook*
+		  tree-count ; signature is kinda silly here
+		  c-define-1 apropos map-values trace-in profile-in
+		  define-expansion substring-uncopied ; this because errmsg has "substring" not "substring-uncopied"
+		  heap-scan heap-analyze heap-holders heap-holder
+		  check check-funcs type-ok
+		  show-stack trace-in profile-in apply call-with-exit
+		  define-expansion call-with-current-continuation 
+		  vector-append append ; append gets uninteresting type conversion complaints
+		  call/cc call-with-output-string open-input-function open-output-function
+		  set-current-input-port ;set-current-output-port
+		  set-current-error-port))
+
 (let ((max-args 3))
   (define-constant one 1)
   
@@ -60,7 +80,7 @@
 	     (lambda (type info)
 	       (if (and (positive? args-now)
 			(memq type '(wrong-type-arg wrong-number-of-args out-of-range syntax-error io-error
-				     division-by-zero format-error missing-method error invalid-escape-function)))
+				     division-by-zero format-error missing-method error invalid-exit-function)))
 		   (quit)))))
        
        (let ((c-args (vector-ref auto-arglists args-now)))
@@ -68,7 +88,7 @@
 	 
 	 (let ((p (list-tail c-args args-now))
 	       (checker (and (pair? sig) (car sig)))) ; see map-values
-	   
+
 	   (if (= args-left 1)
 	       (call-with-exit
 		(lambda (quit)
@@ -79,7 +99,7 @@
 		      (apply func c-args))
 		    (lambda (type info)
 		      (if (or (memq type '(wrong-number-of-args out-of-range syntax-error io-error
-					   division-by-zero format-error error missing-method invalid-escape-function))
+					   division-by-zero format-error error missing-method invalid-exit-function))
 			      (and (eq? type 'wrong-type-arg)
 				   (pair? (cdr info))
 				   (pair? (cddr info))
@@ -134,20 +154,7 @@
 		    (symbol->value (car lst))
 		    (and (pair? (car lst))
 			 (apply lambda '(x) (list (list 'or (list (caar lst) 'x) (list (cadar lst) 'x)))))))))
-  
-  (define baddies '(exit emergency-exit abort autotest s7-optimize dynamic-unwind
-			 all delete-file system set-cdr! stacktrace test-sym
-			 cutlet varlet gc cond-expand reader-cond
-			 openlet coverlet eval vector list cons values
-			 symbol-table load throw error
-			 make-rectangular macro macro* bacro bacro*
-			 copy fill! hash-table-set! vector-set! let-set! list-values apply-values immutable!
-			 *unbound-variable-hook* *load-hook* *rootlet-redefinition-hook* *missing-close-paren-hook* *read-error-hook*
-			 tree-count ; signature is kinda silly here
-			 c-define-1 apropos map-values trace-in profile-in
-			 define-expansion
-			 heap-scan heap-analyze heap-holders heap-holder))
-  
+
   (define (test-sym sym)
     (when (and (not (memq sym baddies))
 	       (defined? sym))
@@ -157,7 +164,7 @@
 	    (let ((bottom (car argn))
 		  (top (min (cdr argn) max-args))
 		  (strname (symbol->string sym)))
-	      (unless (memv (strname 0) '(#\{ #\[ #\())
+	      ;(unless (memv (strname 0) '(#\{ #\[ #\()) ; no longer relevant, setters start with #<, none with {
 		(if (< top bottom)
 		    (format *stderr* ";~A (bottom: ~A, top: ~A)...~%" sym bottom top))
 		(set! low bottom)
@@ -167,11 +174,12 @@
 					(set-cdr! lst lst)))
 				     (else (copy (signature f))))))
 		      (map-values sig)
-		      (autotest f () 0 top (if (pair? sig) (cdr sig) ()))))))))))
+		      (autotest f () 0 top (if (pair? sig) (cdr sig) ())))))))));)
   
   (define (all)
     (let ((st (symbol-table)))
-      (for-each test-sym st)))
+      ;(do ((i 0 (+ i 1))) ((= i 10))
+      (for-each test-sym st)));)
 					;(do ((i 0 (+ i 1)) (len (length st))) ((= i 1000)) (test-sym (st (random len))))
 					;(test-sym 'object->string)
 					;(test-sym 'for-each)
@@ -204,17 +212,17 @@
 	 (or (memq (car types) '(#t values))
 	     ((symbol->value (car types)) probe)
 	     (type-ok probe (cdr types)))))
-  
+
   (define (check sym)
     (let ((func (symbol->value sym)))
-      (unless (or (not (procedure? func))
-		  (memq sym baddies))
+      (when (and (procedure? func)
+		 (not (memq sym baddies)))
 	(let ((ari (arity func))
 	      (sig (signature func))
 	      (doc (documentation func)))
 	  (unless (or (string=? doc "")
 		      (string-position (symbol->string sym) doc))
-	      (format *stderr* "~A documentation does not mention it: ~S~%" sym doc))
+	    (format *stderr* "~A documentation does not mention it: ~S~%" sym doc))
 	  (when (pair? sig)
 	    (let ((res-types (if (pair? (car sig)) (car sig) (list (car sig)))))
 	      
@@ -321,23 +329,7 @@
 				      (not (memq sym '(apply call-with-exit))))
 			     (format *stderr* "(~S ~S) -> arg num error but arity: ~S~%" sym probe1 ari))))))
 		 probes))))))))
-  
-  (define baddies '(exit emergency-exit abort s7-optimize dynamic-unwind 
-		    delete-file system set-cdr! stacktrace check check-funcs type-ok
-		    cutlet varlet gc cond-expand reader-cond
-		    openlet coverlet eval ;vector list cons values hash-table
-		    symbol-table load throw error
-		    make-rectangular macro macro* bacro bacro*
-		    copy fill! hash-table-set! vector-set! let-set! list-values apply-values immutable!
-		    *unbound-variable-hook* *load-hook* *rootlet-redefinition-hook* *missing-close-paren-hook* *read-error-hook*
-		    tree-count ; signature is kinda silly here
-		    trace-in profile-in apply call-with-exit
-		    define-expansion call-with-current-continuation vector-append append ; append gets uninteresting type conversion complaints
-		    call/cc call-with-output-string open-input-function open-output-function
-		    set-current-input-port set-current-output-port set-current-error-port
-		    heap-scan heap-analyze heap-holders heap-holder
-		    ))
-  
+
   (define (check-funcs)
     (let ((syms (symbol-table)))
       (for-each check syms)))

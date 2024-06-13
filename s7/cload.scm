@@ -291,7 +291,7 @@
 	       (format p "#include <~A>~%" header))
 	     headers))
 	(format p "#include \"s7.h\"~%~%")
-	(format p "static s7_pointer c_pointer_string, string_string, character_string, boolean_string, real_string, complex_string, integer_string;~%"))
+	(format p "static s7_pointer fsym, ffunc, c_pointer_string, string_string, character_string, boolean_string, real_string, complex_string, integer_string;~%"))
       
       (define collides?
 	(let ((all-names (hash-table)))
@@ -426,7 +426,7 @@
 		(when (and (eq? return-type 'double)
 			   (< num-args 5)
 			   (sig-every? (lambda (p) (eq? p 'double)) arg-types)
-			   (not (defined? (symbol scheme-name) rootlet))) ; see below, double-funcs entry not used if already defined
+			   (not (defined? (symbol scheme-name) (rootlet)))) ; see below, double-funcs entry not used if already defined
 		  (let ((local-name #f))
 		    (case num-args
 		      ((0)
@@ -450,9 +450,9 @@
 		       (format pp "static s7_double ~A~A(s7_double x1, s7_double x2, s7_double x3, s7_double x4) {return(~A(x1, x2, x3, x4));}~%"
 			       func-name local-name func-name)))
 		    (set! double-funcs (cons (list func-name scheme-name local-name) double-funcs))))
-		
+
 		(when (and (memq return-type '(int size_t))        ; int (f int|double|void)
-			   (not (defined? (symbol scheme-name) rootlet)) ; see below, int-funcs entry not used if already defined
+			   (not (defined? (symbol scheme-name) (rootlet))) ; see below, int-funcs entry not used if already defined
 			   (or ;(= num-args 0)
 			    (and (= num-args 1)
 				 (memq (car arg-types) '(int size_t double)))
@@ -487,6 +487,7 @@
 		;; other possibilities: d_7pi|pii p=double* etc piid=checks in s7 (assumes float-vector)
 		;;   d_pd [lots of d_pdd, d_p, p_i and i_p]
 		;;   but how to recognize the "p" portions? (d_7pi with p="s7_pointer" gets no hits in libgsl)
+		;; libgsl: d_i: 15, d_ii: 5, [handled: d_id: 32], d_iid: 7, d_ddi: 4, d_idd: 10, d_idi: 6, i_ddd i_iii: 1, i_dddd: 4
 		
 		(format pp "~%")
 		(set! functions (cons (list scheme-name base-name 
@@ -639,14 +640,15 @@
 		 (num-args    (f 3))
 		 (opt-args    (if (> (length f) 4) (f 4) 0))
 		 (sig         (and (> (length f) 5) (f 5))))
-	     (format p "~%  s7_define(sc, cur_env,~%            s7_make_symbol(sc, ~S),~%" scheme-name)
-	     (format p "            s7_make_typed_function(sc, ~S, ~A, ~D, ~D, false, ~S, ~A));~%"
+	     (format p "~%  s7_define(sc, cur_env,~%            fsym = s7_make_symbol(sc, ~S),~%" scheme-name)
+	     (format p "            ffunc = s7_make_typed_function(sc, ~S, ~A, ~D, ~D, false, ~S, ~A));~%"
 		     scheme-name
 		     base-name
 		     num-args
 		     opt-args
 		     helpf
-		     (if (pair? sig) (signatures sig) 'NULL))))
+		     (if (pair? sig) (signatures sig) 'NULL))
+	     (format p "  s7_symbol_set_initial_value(sc, fsym, ffunc);~%"))) ; not sure this is a good idea, added 24-May-24
 	 functions)
 	
 	;; optimizer connection

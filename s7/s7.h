@@ -1,10 +1,10 @@
 #ifndef S7_H
 #define S7_H
 
-#define S7_VERSION "10.6"
-#define S7_DATE "10-Apr-2023"
+#define S7_VERSION "10.11"
+#define S7_DATE "14-June-2024"
 #define S7_MAJOR_VERSION 10
-#define S7_MINOR_VERSION 6
+#define S7_MINOR_VERSION 11
 
 #include <stdint.h>           /* for int64_t */
 
@@ -68,6 +68,7 @@ void *s7_c_pointer_with_type(s7_scheme *sc, s7_pointer p, s7_pointer expected_ty
 s7_pointer s7_c_pointer_type(s7_pointer p);
 s7_pointer s7_make_c_pointer(s7_scheme *sc, void *ptr);              /* these are for passing uninterpreted C pointers through Scheme */
 s7_pointer s7_make_c_pointer_with_type(s7_scheme *sc, void *ptr, s7_pointer type, s7_pointer info);
+s7_pointer s7_make_c_pointer_wrapper_with_type(s7_scheme *sc, void *ptr, s7_pointer type, s7_pointer info);
 
 s7_pointer s7_eval_c_string(s7_scheme *sc, const char *str);         /* (eval-string str) */
 s7_pointer s7_eval_c_string_with_environment(s7_scheme *sc, const char *str, s7_pointer e);
@@ -147,6 +148,7 @@ s7_int s7_gc_protect(s7_scheme *sc, s7_pointer x);
 void s7_gc_unprotect_at(s7_scheme *sc, s7_int loc);
 s7_pointer s7_gc_protected_at(s7_scheme *sc, s7_int loc);
 s7_pointer s7_gc_protect_via_stack(s7_scheme *sc, s7_pointer x);
+s7_pointer s7_gc_protect_2_via_stack(s7_scheme *sc, s7_pointer x, s7_pointer y);
 s7_pointer s7_gc_unprotect_via_stack(s7_scheme *sc, s7_pointer x);
 s7_pointer s7_gc_protect_via_location(s7_scheme *sc, s7_pointer x, s7_int loc);
 s7_pointer s7_gc_unprotect_via_location(s7_scheme *sc, s7_int loc);
@@ -433,6 +435,9 @@ s7_pointer s7_symbol_table_find_name(s7_scheme *sc, const char *name);
 s7_pointer s7_symbol_value(s7_scheme *sc, s7_pointer sym);
 s7_pointer s7_symbol_set_value(s7_scheme *sc, s7_pointer sym, s7_pointer val);
 s7_pointer s7_symbol_local_value(s7_scheme *sc, s7_pointer sym, s7_pointer local_env);
+s7_pointer s7_symbol_initial_value(s7_pointer symbol);                      /* #_symbol's value */
+s7_pointer s7_symbol_set_initial_value(s7_scheme *sc, s7_pointer symbol, s7_pointer value);
+
 bool s7_for_each_symbol_name(s7_scheme *sc, bool (*symbol_func)(const char *symbol_name, void *data), void *data);
 bool s7_for_each_symbol(s7_scheme *sc, bool (*symbol_func)(const char *symbol_name, void *data), void *data);
 
@@ -903,10 +908,16 @@ bool s7_is_bignum(s7_pointer obj);
  *
  *        s7 changes
  *
+ * 31-May:    *s7* 'symbol-printer and 'symbol-quote?.
+ * 24-May:    symbol-initial-value, s7_symbol_initial_value, and setters.
+ * 24-Apr:    port-string.
+ * 8-Jan-23:  s7_gc_protect_2_via_stack.
+ * --------
+ * 15-Nov:    s7_make_c_pointer_wrapper_with_type.
  * 17-Mar-23: moved s7_is_bignum declaration outside WITH_GMP.
  * --------
  * 9-Nov:     nan, nan-payload, +nan.<int>.
- * 19-Oct:    s7_let_field* synonyms: s7_starlet*.
+ * 19-Oct:    s7_let_field* synonyms: s7_starlet_ref|set.
  * 16-Sep:    s7_number_to_real_with_location. s7_wrong_type_error. s7_make_string_wrapper_with_length. s7_make_semipermanent_string.
  * 21-Apr:    s7_is_multiple_value.
  * 11-Apr:    removed s7_apply_*.

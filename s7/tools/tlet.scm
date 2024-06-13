@@ -46,7 +46,7 @@
 	  (sum2 0.0)
 	  (sum3 0.0)
 	  (inc 0.0))
-      (do ((i 0 (#_+ i 1)))
+      (do ((i 0 (#_+ i 1))) ; these #_'s make this much faster despite random->g_random rather than random_i_7i -- why? c_function_is_ok! lookup do_step1 eval [global]
 	  ((#_= i size))
 	(set! inc (#_symbol->value (#_vector-ref symbols i)))
 	(set! sum1 (#_+ sum1 inc))
@@ -55,6 +55,22 @@
       (format *stderr* "~A ~A ~A ~A~%" (/ (- (* size size) size) 2) sum1 sum2 sum3))))
 (in-e)
 
+#|
+without the with-let vs with it (without is slower!):
+total: 55.001
+ 98.000    (0.000      98.000)         s7.c:fx_c_opssq_s
+ 65.000    (0.000      65.000)         s7.c:fx_c_s_opsq
+ 50.000    (0.000      50.000)         s7.c:fx_c_as
+ 34.715    (0.000      34.715)         s7.c:g_random_1
+ 14.000    (0.000      14.000)         s7.c:s7_symbol_local_value
+ 14.000    (32.000     46.000)         s7.c:g_symbol_to_value
+-10.000    (10.000     0.000)          s7.c:fx_unsafe_s
+-17.000    (17.000     0.000)          s7.c:fx_c_a
+-42.000    (42.000     0.000)          s7.c:s7_symbol_value
+-48.000    (48.000     0.000)          s7.c:fx_c_opssq
+-49.000    (49.000     0.000)          s7.c:fx_c_s_opaq
+-54.715    (54.715     0.000)          s7.c:g_random
+|#
 
 (define (with-biglet)
   (let ((biglet (inlet)))
@@ -323,6 +339,35 @@
       (f82 i)))
   (test82)
   )
+
+(let ()
+  (define (f1)
+    (do ((i 0 (+ i 1)))
+	((= i 100000))
+      (unless (eq? (let-ref (unlet) :abs) #_abs) ; 758 g_unlet 740!! -> 5 (opt_p_unlet_ref)
+	(display "oops\n"))))
+  (f1)
+  
+  (define (f2)
+    (do ((i 0 (+ i 1)))
+	((= i 100000))
+      (unless (eq? ((unlet) :abs) #_abs) ; 792 unlet 740, eval 23 -> 8 (opt_p_unlet_ref) -> 7 direct
+	(display "oops\n"))))
+  (f2)
+  
+  (define (f3)
+    (do ((i 0 (+ i 1)))
+	((= i 100000))
+      (unless (eq? (let-ref (rootlet) :abs) #_abs) ; 13 goes through rootlet -> 5 direct
+	(display "oops\n"))))
+  (f3)
+  
+  (define (f4)
+    (do ((i 0 (+ i 1)))
+	((= i 100000))
+      (unless (eq? ((rootlet) :abs) #_abs) ; 47 -> 8 direct
+	(display "oops\n"))))
+  (f4))
 
 (when (> (*s7* 'profile) 0)
   (show-profile 200))

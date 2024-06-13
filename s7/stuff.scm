@@ -76,12 +76,9 @@
 	     (set! lines (cons (and (pair? (car x)) (pair-line-number (car x))) lines))
 	     (set! files (cons (and (pair? (car x)) (pair-filename (car x))) files)))))
 
-       ;; show the enclosing contexts
-       (let ((old-print-length (*s7* 'print-length)))
-	 (set! (*s7* 'print-length) 8)
+       (let-temporarily (((*s7* 'print-length) 8))
 	 (do ((e (outlet ow) (outlet e)))
-	     ((memq e elist)
-	      (set! (*s7* 'print-length) old-print-length))
+	     ((memq e elist))
 	   (if (and (number? (length e)) ; with-let + mock-data + length method?
 		    (> (length e) 0))
 	       (format p "~%~{~A~| ~}~%" e)
@@ -198,7 +195,7 @@
 	(lambda args #f)))))
 
 (define linearize
-  (let ((+documentation+ " (linearize lst) turns a circular list into normal list:\n\
+  (let ((+documentation+ "(linearize lst) turns a circular list into normal list:\n\
     (linearize (circular-list 1 2)) -> '(1 2)"))
     (lambda (lst)
       (let lin-1 ((lst lst)
@@ -315,6 +312,11 @@
 (define-macro (progv vars vals . body)
   `(apply (apply lambda ,vars ',body) ,vals))
 
+;; these also appear to work:
+;;   (define-macro (progv vars vals . body) `((apply lambda ,vars ',body) (apply values ,vals)))
+;;   (define-macro (progv vars vals . body) `((apply lambda ,vars ',body) `,@,vals))
+
+
 (define-macro (symbol-set! var val) ; like CL's set
   `(apply set! ,var ',val ()))
 
@@ -399,17 +401,21 @@
 	       (set! result (cons `(set! (setter (quote ,(caar var))) (list-ref ,gsetters ,i)) result))))
        ,@body)))
 
-(define-macro (while test . body)      ; while loop with predefined break and continue.  This really wants to be define-expansion.
-  `(call-with-exit
-    (lambda (break)
-      (let loop ()
-	(call-with-exit
-	 (lambda (continue)
-	   (do ()
-	       ((not ,test) (break))
-	     ,@body)))
-	(loop)))))
+(define-macro (while test . body)      ; while loop with predefined break and continue
+  (let ((loop (gensym)))
+    `(call-with-exit
+      (lambda (break)
+	(let ,loop ()
+	  (call-with-exit
+	   (lambda (continue)
+	     (do ()
+		 ((not ,test) (break))
+	       ,@body)))
+	  (,loop))))))
 
+(define-macro (anaphoric-when test . body) ; use "test-result" as the variable holding the test result
+  `(let ((test-result ,test))
+     (when test-result ,@body)))
 
 (define-macro (do* spec end . body)
   `(let* ,(map (lambda (var)
@@ -715,8 +721,6 @@ Unlike full-find-if, safe-find-if can handle any circularity in the sequences.")
       (error 'wrong-type-arg "safe-count-if second argument, ~A, should be a sequence" sequence)))
 
 
-
-
 ;;; ----------------
 (define sequences->list
   (let ((+documentation+ "(sequences->list . sequences) returns a list of elements of all the sequences:\n\
@@ -993,7 +997,7 @@ Unlike full-find-if, safe-find-if can handle any circularity in the sequences.")
 				 (cons (car method) (cadr method))
 				 (cons method #f)))
 			   ,methods)                     ; the incoming new methods
-		      
+
 		      ;; add an object->string method for this class (this is already a generic function).
 		      (list (cons 'object->string
 				  (lambda (obj . rest)
@@ -1270,7 +1274,6 @@ Unlike full-find-if, safe-find-if can handle any circularity in the sequences.")
 |#
 ;; ideally this would simply vanish, and make no change in the run-time state, but (values) here returns #<unspecified>
 ;;   (let ((a 1) (b 2)) (list (set! a 3) (reflective-probe) b)) -> '(3 2) not '(3 #<unspecified> 2)
-;;   I was too timid when I started s7 and thought (then) that (abs -1 (values)) should be an error
 ;; perhaps if we want it to disappear:
 
 (define-bacro (reflective-probe . body)
@@ -1358,7 +1361,7 @@ Unlike full-find-if, safe-find-if can handle any circularity in the sequences.")
   (let ((new-len (let ((len (length obj)))
 		   (- (min len (or end len)) start))))
     (if (negative? new-len)
-	(error 'out-of-range "end: ~A should be greater than start: ~A" end start))
+	(error 'out-of-range "end: ~A should be greater than start: ~A" (min len (or end len)) start))
 
     (cond ((vector? obj)
 	   (subvector obj start (+ start new-len)))
@@ -1449,11 +1452,11 @@ Unlike full-find-if, safe-find-if can handle any circularity in the sequences.")
 ;;; --------------------------------------------------------------------------------
 
 (define (*s7*->list) ; (let->list *s7*) flattened and using keywords
-  (do ((p (let->list *s7*) (cdr p)) 
+  (do ((p (let->list *s7*) (cdr p))
        (L ()))
-      ((null? p) 
+      ((null? p)
        (reverse L))
-    (set! L (cons (cdar p) 
+    (set! L (cons (cdar p)
 		  (cons (symbol->keyword (caar p))
 			L)))))
 
@@ -1464,7 +1467,7 @@ Unlike full-find-if, safe-find-if can handle any circularity in the sequences.")
   (if (not (string? name))
       (error 'wrong-type-arg "directory name should be a string: ~S" name)
       (make-iterator
-       (with-let (sublet *libc* :name name :recursive recursive)
+       (with-let (sublet *libc* :name name :recursive recursive :NULL (c-pointer 0 'void*))
 	 (let ((dir (opendir name)))
 	   (if (equal? dir NULL)
 	       (error 'io-error "can't open ~S: ~S" name (strerror (errno)))
@@ -1562,8 +1565,8 @@ Unlike full-find-if, safe-find-if can handle any circularity in the sequences.")
 
 ;;; but hooks need an indication that a name passed as an argument is not a parameter name even when it is defined (in rootlet for example)
 ;;;   (define h (make-hook 'x)) (set! (hook-functions h) (list (lambda (hk) (set! (hk 'result) (hk 'abs))))) (h 123) -> abs
-;;; but the current s7.c version is much faster than using copy, and surely copy isn't needed here; the current version returns #<undefined> for anything that 
-;;;  would otherwise be found in rootlet, but ideally we wouldn't have to create a new let, load up the fallback etc -- 
+;;; but the current s7.c version is much faster than using copy, and surely copy isn't needed here; the current version returns #<undefined> for anything that
+;;;  would otherwise be found in rootlet, but ideally we wouldn't have to create a new let, load up the fallback etc --
 ;;;  maybe add a flag on the let (blocked?) or notice let-ref-fallback in lets (as opposed to sublet), then it could be in the let with result.
 
 ;;; here is a macro make-hook:
@@ -1597,7 +1600,7 @@ Unlike full-find-if, safe-find-if can handle any circularity in the sequences.")
 ;;; (sandbox '(let ((x 1)) (+ x 2))) -> 3
 ;;; (sandbox '(let ((x 1)) (+ x 2) (exit))) -> #f
 
-;;; perhaps tgsl's (immutable-let (rootlet))? 
+;;; perhaps tgsl's (immutable-let (rootlet))?
 ;;; perhaps use the blocking let?
 
 (define sandbox
@@ -1642,7 +1645,7 @@ Unlike full-find-if, safe-find-if can handle any circularity in the sequences.")
 	      hash-table-set! hash-table-entries cyclic-sequences call/cc call-with-current-continuation
 	      call-with-exit apply for-each map dynamic-wind values type-of
 	      catch throw error documentation signature help procedure-source
-	      setter arity aritable? not eq? eqv? equal? equivalent? 
+	      setter arity aritable? not eq? eqv? equal? equivalent?
 	      dilambda make-hook hook-functions stacktrace tree-leaves tree-memq tree-set-memq tree-cyclic? tree-count object->let
 	      pi most-positive-fixnum most-negative-fixnum ; +nan.0 +inf.0 -nan.0 -inf.0
 	      *stderr* *stdout* *stdin*
@@ -1740,4 +1743,3 @@ Unlike full-find-if, safe-find-if can handle any circularity in the sequences.")
 				 (apply format #f (cadr args)))
 			       (lambda args
 				 (copy "?")))))))))))))
-
