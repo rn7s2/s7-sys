@@ -102,6 +102,10 @@
            b
            (tfib* (- n 1) b (+ a b)))))
 
+(when (provided? 'debugging)
+  (unless (= (tfib* 91 1 1) 7540113804746346429)
+    (format *stderr* "(tfib* 91 1 1): ~D~%" (tfib 91))))
+
 (define (test31)
   (do ((i 0 (+ i 1)))
       ((= i size))
@@ -325,6 +329,24 @@
   (unless (= result 2178308)
     (format *stderr* "counts6 ~A~%" result)))
 
+
+;;; from reddit, MIT scheme apparently dies trying to print the output, Racket (interpreted?!) takes 10+ secs
+(define (tc_if_l3a_l3a i j accumulator)
+  (if (>= i 999) ; op_tc_if_a_z_if_a_l3a_l3a, callg 117 -> 91
+      (cons (* i 999) accumulator)
+      (if (< j 999)
+          (tc_if_l3a_l3a i
+               (+ j 1)
+               (cons (* j i)
+                     accumulator))
+          (tc_if_l3a_l3a (+ i 1)
+               (+ i 1)
+               (cons (* j i)
+                     accumulator)))))
+
+(let ((result (tc_if_l3a_l3a 100 100 ())))
+  (unless (= (car result) 998001) ; overall length is 405450
+    (format *stderr* "l3a: ~A~%" result)))
 
 
 (when (> (*s7* 'profile) 0)
