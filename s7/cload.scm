@@ -133,9 +133,7 @@
 			 '(boolean s7_is_boolean s7_boolean s7_make_boolean bool)
 			 '(real s7_is_real s7_number_to_real_with_caller s7_make_real s7_double)
 
-			 ;; '(complex s7_is_complex #f s7_make_complex s7_Complex)
-			 ;; the typedef is around line 6116 in s7.c, but we also need s7_complex which requires the s7_Complex type
-			 ;; xen.h uses (s7_real_part(a) + s7_imag_part(a) * _Complex_I) instead since c++ won't let use define s7_Complex in s7.h
+			 ;; '(complex s7_is_complex s7_to_c_complex?? s7_make_complex s7_complex)
 
 			 '(string s7_is_string s7_string s7_make_string char*)
 			 (list 'character 's7_is_character 's7_character 's7_make_character (symbol "unsigned char"))
@@ -227,8 +225,8 @@
 	  (type-symbols ())
 	  (p #f)
 	  (pp (open-output-string))
-	  (int-funcs ())  ; functions guaranteed to return int
-	  (double-funcs ())  ; functions returning double, all args double
+	  (int-funcs ())        ; functions guaranteed to return int
+	  (double-funcs ())     ; functions returning double, all args double
 	  (double-int-funcs ()) ; functions return double, args are (integer double)
 	  (sig-symbols (list (cons 'integer? 0) (cons 'boolean? 0) (cons 'real?  0) (cons 'float? 0) 
 			     (cons 'char? 0) (cons 'string? 0) (cons 'c-pointer? 0) (cons 't 0)))
@@ -291,7 +289,7 @@
 	       (format p "#include <~A>~%" header))
 	     headers))
 	(format p "#include \"s7.h\"~%~%")
-	(format p "static s7_pointer fsym, ffunc, c_pointer_string, string_string, character_string, boolean_string, real_string, complex_string, integer_string;~%"))
+	(format p "static s7_pointer fsym, s7_F, s7_unspec, ffunc, c_pointer_string, string_string, character_string, boolean_string, real_string, complex_string, integer_string;~%"))
       
       (define collides?
 	(let ((all-names (hash-table)))
@@ -414,12 +412,12 @@
 		  (format pp ")")
 		  
 		  (if (eq? return-translator 's7_make_c_pointer_with_type)
-		      (format pp ", ~S, s7_f(sc))" (type->type-symbol return-type))
+		      (format pp ", ~S, s7_F)" (type->type-symbol return-type))
 		      (if (symbol? return-translator)
 			  (format pp ")")))
 		  (format pp (if (not (eq? return-translator #t))
 				 ");~%"
-				 ";~%  return(s7_unspecified(sc));~%"))
+				 ";~%  return(s7_unspec);~%"))
 		  (format pp "}~%"))
 		
 		;; add optimizer connection
@@ -561,6 +559,8 @@
 	   signatures)
 	  (format p "  }~%~%"))
 
+	(format p "  s7_F = s7_f(sc);~%")
+	(format p "  s7_unspec = s7_unspecified(sc);~%")
 	(format p "  string_string = s7_make_semipermanent_string(sc, \"a string\");~%")
 	(format p "  c_pointer_string = s7_make_semipermanent_string(sc, \"a c-pointer\");~%")
 	(format p "  character_string = s7_make_semipermanent_string(sc, \"a character\");~%")
@@ -594,7 +594,7 @@
 		    (scheme-name (string-append prefix (if (> (length prefix) 0) ":" "") c-name))
 		    (trans (C->s7 type)))
 	       (if (eq? trans 's7_make_c_pointer_with_type)
-		   (format p "  s7_define(sc, cur_env, s7_make_symbol(sc, ~S), ~A(sc, (~A)~A, s7_make_symbol(sc, ~S), s7_f(sc)));~%" 
+		   (format p "  s7_define(sc, cur_env, s7_make_symbol(sc, ~S), ~A(sc, (~A)~A, s7_make_symbol(sc, ~S), s7_F));~%" 
 			   scheme-name
 			   trans
 			   (C->s7-cast type)
@@ -618,7 +618,7 @@
 		    (trans (C->s7 type)))
 	       (format p "#ifdef ~A~%" c-name)
 	       (if (eq? trans 's7_make_c_pointer_with_type)
-		   (format p "  s7_define(sc, cur_env, s7_make_symbol(sc, ~S), s7_make_c_pointer_with_type(sc, (~A)~A, s7_make_symbol(sc, \"~S\"), s7_f(sc)));~%" 
+		   (format p "  s7_define(sc, cur_env, s7_make_symbol(sc, ~S), s7_make_c_pointer_with_type(sc, (~A)~A, s7_make_symbol(sc, \"~S\"), s7_F));~%" 
 			   scheme-name
 			   (C->s7-cast type)
 			   c-name
@@ -641,7 +641,7 @@
 		 (opt-args    (if (> (length f) 4) (f 4) 0))
 		 (sig         (and (> (length f) 5) (f 5))))
 	     (format p "~%  s7_define(sc, cur_env,~%            fsym = s7_make_symbol(sc, ~S),~%" scheme-name)
-	     (format p "            ffunc = s7_make_typed_function(sc, ~S, ~A, ~D, ~D, false, ~S, ~A));~%"
+	     (format p "            ffunc = s7_make_typed_function_with_environment(sc, ~S, ~A, ~D, ~D, false, ~S, ~A, cur_env));~%"
 		     scheme-name
 		     base-name
 		     num-args

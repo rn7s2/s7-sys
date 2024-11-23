@@ -62,7 +62,6 @@
   "`(ok? ',tst (lambda () (#_let ((___x #(#f))) (vector-set! ___x 0 ,tst))) ,expected)"
   "`(ok? ',tst (lambda () (dynamic-wind #f (lambda () ,tst) #f)) ,expected)"
   "`(ok? ',tst (lambda () (caadr (catch 'receive (lambda () (throw 'receive ,tst)) (lambda any any)))) ,expected)"
-  "`(ok? ',tst (lambda () (stacktrace (- (random 100) 50) (- (random 100) 50) (- (random 100) 50) (- (random 100) 50) (> (random 100) 50)) ,tst) ,expected)"
   "`(ok? ',tst (lambda () (#_let ((__val__ (s7-optimize '(,tst)))) (if (eq? __val__ #<undefined>) ,tst __val__))) ,expected)"
   "`(ok? ',tst (lambda () (#_let ((!x 0)) (set! (setter '!x) (lambda (_A _B) ,tst)) (set! !x 1))) ,expected)"
   "`(ok? ',tst (lambda () (define* (fgh1 (!x ,tst)) !x) (fgh1)) ,expected)"
@@ -247,6 +246,9 @@
 (format *stderr* "~NC tnum ~NC~%" 20 #\- 20 #\-)
 (system "./repl tnum.scm")
 
+(format *stderr* "~NC tcomplex ~NC~%" 20 #\- 20 #\-)
+(system "./repl tcomplex.scm")
+
 (format *stderr* "~NC tmock ~NC~%" 20 #\- 20 #\-)
 (system "./repl tmock.scm")
 
@@ -280,6 +282,12 @@
 (format *stderr* "~NC tcase ~NC~%" 20 #\- 20 #\-)
 (system "./repl tcase.scm")
 
+(format *stderr* "~NC tlimit ~NC~%" 20 #\- 20 #\-)
+(system "./repl tlimit.scm")
+
+(format *stderr* "~NC tbit ~NC~%" 20 #\- 20 #\-)
+(system "./repl tbit.scm")
+
 (format *stderr* "~NC index ~NC~%" 20 #\- 20 #\-)
 (system "./snd make-index.scm")
 
@@ -298,9 +306,10 @@
 (format *stderr* "~NC full s7test ~NC~%" 20 #\- 20 #\-)
 (system "./repl full-s7test.scm")
 
-(format *stderr* "~NC full s7test ~NC~%" 20 #\- 20 #\-)
-(system "gcc -o trepl ~/cl/trepl.c s7.o -O -Wl,-export-dynamic -lm -I. -ldl")
-(system "trepl")
+(unless (provided? 'debugging) ; somehow the debugging stuff clobbers this sometimes in gdb??
+  (format *stderr* "~NC trepl full s7test ~NC~%" 20 #\- 20 #\-)
+  (system "gcc -o trepl ~/cl/trepl.c s7.o -O -Wl,-export-dynamic -lm -I. -ldl")
+  (system "trepl"))
 
 (format *stderr* "~NC valgrind leak check ~NC~%" 20 #\- 20 #\-)
 (system "valgrind --leak-check=full --show-reachable=no --suppressions=/home/bil/cl/free.supp ./repl s7test.scm")

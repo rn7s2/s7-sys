@@ -81,18 +81,18 @@
 (define (g1 lsize)
   (do ((i 0 (+ i 1)))
       ((= i lsize))
-    (f (lambda (b) (+ b 1)) 10)))
+    (f (lambda (b) (+ b 1)) 10)))  ; ((lambda (b) (+ b 1)) 10)
 
 (define (g2 lsize)
   (let loop ((i lsize))
     (when (>= i 0)
-      (f (lambda (b) (+ b 1)) 10)
+      (f (lambda (b) (+ b 1)) 10) ; ((lambda (b) (+ b 1)) 10)
       (loop (- i 1)))))
 
 (define (g3 lsize)
   (do ((i 0 (+ i 1)))
       ((= i lsize))
-    (f (vector 11) 0)))
+    (f (vector 11) 0))) ; ((vector 11) 0)
 
 (g1 lsize)
 (g2 lsize)

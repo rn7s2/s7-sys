@@ -689,7 +689,16 @@ static s7_pointer wd1_inner_fn(s7_scheme *s, s7_pointer args)
   return s7_nil(s);
 }
 
+static s7_pointer make_and_free(s7_scheme *sc)
+{
+  s7_scheme *s7;
+  s7 = s7_init();
+  s7_eval_c_string(sc, "(+ 1 1)"); /* or load some file? */
+  s7_free(s7);
+  return(s7_f(sc));
+}
 
+static s7_pointer g_expand(s7_scheme *sc, s7_pointer args) {return(s7_make_integer(sc, s7_integer(s7_car(args)) + 1));}
 
 int main(int argc, char **argv)
 {
@@ -713,55 +722,29 @@ int main(int argc, char **argv)
 
   /* try each straight (no errors) case */
 
-  if (!s7_is_null(sc, s7_nil(sc)))
-    {fprintf(stderr, "%d: %s is not null?\n", __LINE__, s1 = TO_STR(s7_nil(sc))); free(s1);}
-
-  if (s7_is_pair(s7_nil(sc)))
-    {fprintf(stderr, "%d: %s is a pair?\n", __LINE__, s1 = TO_STR(s7_nil(sc))); free(s1);}
-
-  if (!s7_is_boolean(s7_t(sc)))
-    {fprintf(stderr, "%d: %s is not boolean?\n", __LINE__, s1 = TO_STR(s7_t(sc))); free(s1);}
-
-  if (!s7_is_boolean(s7_f(sc)))
-    {fprintf(stderr, "%d: %s is not boolean?\n", __LINE__, s1 = TO_STR(s7_f(sc))); free(s1);}
-
-  if (s7_boolean(sc, s7_f(sc)))
-    {fprintf(stderr, "%d: %s is #t?\n", __LINE__, s1 = TO_STR(s7_f(sc))); free(s1);}
-
-  if (!s7_boolean(sc, s7_t(sc)))
-    {fprintf(stderr, "%d: %s is #f?\n", __LINE__, s1 = TO_STR(s7_t(sc))); free(s1);}
+  if (!s7_is_null(sc, s7_nil(sc))) fprintf(stderr, "%d: () is not null?\n", __LINE__);
+  if (s7_is_pair(s7_nil(sc))) fprintf(stderr, "%d: () is a pair?\n", __LINE__);
+  if (!s7_is_boolean(s7_t(sc))) fprintf(stderr, "%d: #t is not boolean?\n", __LINE__);
+  if (!s7_is_boolean(s7_f(sc))) fprintf(stderr, "%d: #f is not boolean?\n", __LINE__);
+  if (s7_boolean(sc, s7_f(sc)))  fprintf(stderr, "%d: #f is #t?\n", __LINE__);
+  if (!s7_boolean(sc, s7_t(sc))) fprintf(stderr, "%d: #t is #f?\n", __LINE__);
 
   p = s7_make_boolean(sc, true);
-  if (p != s7_t(sc))
-    {fprintf(stderr, "%d: %s is not #t?\n", __LINE__, s1 = TO_STR(p)); free(s1);}
+  if (p != s7_t(sc)) fprintf(stderr, "%d: s7_t(sc) is not #t?\n", __LINE__);
 
   p = s7_make_boolean(sc, false);
-  if (p != s7_f(sc))
-    {fprintf(stderr, "%d: %s is not #f?\n", __LINE__, s1 = TO_STR(p)); free(s1);}
+  if (p != s7_f(sc)) fprintf(stderr, "%d: s7_f(sc) is not #f?\n", __LINE__);
 
-  if (!s7_is_eq(s7_f(sc), s7_f(sc)))
-    {fprintf(stderr, "%d: (eq? %s %s) -> #f?\n", __LINE__, s1 = TO_STR(s7_f(sc)), s2 = TO_STR(s7_f(sc))); free(s1); free(s2);}
+  if (!s7_is_eq(s7_f(sc), s7_f(sc))) fprintf(stderr, "%d: (eq? s7_f(sc) s7_f(sc)) -> #f?\n", __LINE__);
+  if (!s7_is_eqv(sc, s7_f(sc), s7_f(sc))) fprintf(stderr, "%d: (eqv? s7_f(sc) s7_f(sc)) -> #f?\n", __LINE__);
+  if (!s7_is_equal(sc, s7_f(sc), s7_f(sc))) fprintf(stderr, "%d: (equal? s7_f(sc) s7_f(sc)) -> #f?\n", __LINE__);
 
-  if (!s7_is_eqv(sc, s7_f(sc), s7_f(sc)))
-    {fprintf(stderr, "%d: (eqv? %s %s) -> #f?\n", __LINE__, s1 = TO_STR(s7_f(sc)), s2 = TO_STR(s7_f(sc))); free(s1); free(s2);}
+  if (!s7_is_unspecified(sc, s7_unspecified(sc))) fprintf(stderr, "%d: s7_unspecifed(sc) is not #<unspecified>?\n", __LINE__);
+  if (s7_is_eq(s7_eof_object(sc), s7_undefined(sc))) fprintf(stderr, "%d: (eq? #<eof> #<undefined>) -> #t?\n", __LINE__);
+  if (s7_is_eqv(sc, s7_eof_object(sc), s7_undefined(sc))) fprintf(stderr, "%d: (eqv? #eof> #<undefined>) -> #t?\n", __LINE__);
+  if (s7_is_equal(sc, s7_eof_object(sc), s7_undefined(sc))) fprintf(stderr, "%d: (equal? #<eof> #<undefined>) -> #t?\n", __LINE__);
+  if (!s7_is_valid(sc, s7_t(sc))) fprintf(stderr, "%d: s7_t(sc) is not valid?\n", __LINE__);
 
-  if (!s7_is_equal(sc, s7_f(sc), s7_f(sc)))
-    {fprintf(stderr, "%d: (equal? %s %s) -> #f?\n", __LINE__, s1 = TO_STR(s7_f(sc)), s2 = TO_STR(s7_f(sc))); free(s1); free(s2);}
-
-  if (!s7_is_unspecified(sc, s7_unspecified(sc)))
-    {fprintf(stderr, "%d: %s is not #<unspecified>?\n", __LINE__, s1 = TO_STR(s7_unspecified(sc))); free(s1);}
-
-  if (s7_is_eq(s7_eof_object(sc), s7_undefined(sc)))
-    {fprintf(stderr, "%d: (eq? %s %s) -> #t?\n", __LINE__, s1 = TO_STR(s7_eof_object(sc)), s2 = TO_STR(s7_undefined(sc))); free(s1); free(s2);}
-
-  if (s7_is_eqv(sc, s7_eof_object(sc), s7_undefined(sc)))
-    {fprintf(stderr, "%d: (eqv? %s %s) -> #t?\n", __LINE__, s1 = TO_STR(s7_eof_object(sc)), s2 = TO_STR(s7_undefined(sc))); free(s1); free(s2);}
-
-  if (s7_is_equal(sc, s7_eof_object(sc), s7_undefined(sc)))
-    {fprintf(stderr, "%d: (equal? %s %s) -> #t?\n", __LINE__, s1 = TO_STR(s7_eof_object(sc)), s2 = TO_STR(s7_undefined(sc))); free(s1); free(s2);}
-
-  if (!s7_is_valid(sc, s7_t(sc)))
-    {fprintf(stderr, "%d: %s is not valid?\n", __LINE__, s1 = TO_STR(s7_t(sc))); free(s1);}
   {
     typedef struct fake_cell {
       union {
@@ -775,15 +758,16 @@ int main(int argc, char **argv)
     x->tf.flag = 53 + (1 << 11);
     if (s7_is_valid(sc, (s7_pointer)x))
       fprintf(stderr, "fake_cell is ok?\n");
+#if 0
     if (!s7_is_provided(sc, "debugging"))
       {
 	s1 = TO_STR((s7_pointer)x);
 	free(s1);
       }
+#endif
     free(x);
   }
-  if (s7_is_c_pointer(s7_t(sc)))
-    {fprintf(stderr, "%d: %s is a raw c pointer?\n", __LINE__, s1 = TO_STR(s7_t(sc))); free(s1);}
+  if (s7_is_c_pointer(s7_t(sc))) fprintf(stderr, "%d: s7_t(sc) is a raw c pointer?\n", __LINE__);
 
   i = 32;
   p = s7_make_c_pointer(sc, (void *)(&i));
@@ -981,9 +965,9 @@ int main(int argc, char **argv)
     {fprintf(stderr, "%d: (number->string %s) is not \"1.0+1.0i\"?\n", __LINE__, s1 = TO_STR(p)); free(s1);}
   free(s2);
 
-  s7_immutable(p);
+  s7_set_immutable(sc, p);
   if (!s7_is_immutable(p))
-    fprintf(stderr, "s7_immutable failed?\n");
+    fprintf(stderr, "s7_set_immutable failed?\n");
   s7_gc_unprotect_at(sc, gc_loc);
 
   p = s7_signature(sc, s7_name_to_value(sc, "abs"));
@@ -1020,9 +1004,12 @@ int main(int argc, char **argv)
 
   {
     s7_int* dims;
-    s7_pointer p;
+    s7_pointer p, p1;
     s7_double *els;
     uint8_t *bels;
+    s7_complex cval;
+    s7_complex *cels;
+
     dims = (s7_int *)malloc(2 * sizeof(s7_int));
     dims[0] = 2;
     dims[1] = 3;
@@ -1035,11 +1022,27 @@ int main(int argc, char **argv)
     if (s7_vector_dimension(p, 1) != 3) fprintf(stderr, "%d: s7_vector_dimension 1: %" ld64 "\n", __LINE__, s7_vector_dimension(p, 1));
 
     p = s7_make_float_vector(sc, 6, 1, NULL);
+    if (!s7_is_float_vector(p)) fprintf(stderr, "not a float_vector?\n");
     s7_float_vector_set(p, 1, 32.0);
     if (s7_float_vector_ref(p, 1) != 32.0) fprintf(stderr, "float_vector[1] not 32.0?\n");
     els = s7_float_vector_elements(p);
     if (els[1] != 32.0) fprintf(stderr, "float_vector els[1] not 32.0?\n");
-    if (!s7_is_float_vector(p)) fprintf(stderr, "not a float_vector?\n");
+
+    p = s7_make_complex_vector(sc, 6, 1, NULL);
+    if (!s7_is_complex_vector(p)) fprintf(stderr, "p not a complex_vector?\n");
+    s7_complex_vector_set(p, 1, 32.0);
+    if (s7_complex_vector_ref(p, 1) != 32.0) fprintf(stderr, "complex_vector[1] not 32.0?\n");
+    s7_complex_vector_set(p, 0, 3+2.0i);
+    if (s7_complex_vector_ref(p, 0) != 3+2.0i) fprintf(stderr, "complex_vector[0] not 3+2.0i?\n");
+    cels = s7_complex_vector_elements(p);
+    if (creal(cels[1]) != 32.0) fprintf(stderr, "complex_vector creal(cels[1]) not 32.0?\n");
+    cval = cels[0];
+    if (creal(cval) != 3.0) fprintf(stderr, "complex_vector creal(cels[0]) not 3.0?\n");
+    if (cimag(cval) != 2.0) fprintf(stderr, "complex_vector cimag(cels[0]) not 2.0?\n");
+    p1 = s7_make_complex_vector_wrapper(sc, 3, cels, 1, NULL, false);
+    if (!s7_is_complex_vector(p1)) fprintf(stderr, "p1 not a complex_vector?\n");
+    if (s7_vector_length(p1) != 3) fprintf(stderr, "p1 length != 3?\n");
+    if (s7_complex_vector_ref(p1, 1) != 32.0) fprintf(stderr, "p1 wrapper_complex_vector[1] not 32.0?\n");
 
     p = s7_make_byte_vector(sc, 6, 2, dims);
     s7_byte_vector_set(p, 1, 32);
@@ -1183,6 +1186,16 @@ int main(int argc, char **argv)
       {fprintf(stderr, "%d: wrong thing at gc_loc? %s\n", __LINE__, s1 = TO_STR(s7_gc_protected_at(sc, gc_loc))); free(s1);}
     s7_gc_unprotect_via_location(sc, gc_loc);
     p = s7_make_string_wrapper(sc, "hiho");
+    if (!s7_is_string(p))
+      {fprintf(stderr, "%d: %s is not a string?\n", __LINE__, s1 = TO_STR(p)); free(s1);}
+    if (s7_string_length(p) != 4)
+      {fprintf(stderr, "%d: (length %s) is 4?\n", __LINE__, s1 = TO_STR(p)); free(s1);}
+    p = s7_make_string_wrapper_with_length(sc, "hiho", 4);
+    if (!s7_is_string(p))
+      {fprintf(stderr, "%d: %s is not a string?\n", __LINE__, s1 = TO_STR(p)); free(s1);}
+    if (s7_string_length(p) != 4)
+      {fprintf(stderr, "%d: (length %s) is 4?\n", __LINE__, s1 = TO_STR(p)); free(s1);}
+    p = s7_make_semipermanent_string(sc, "hiho");
     if (!s7_is_string(p))
       {fprintf(stderr, "%d: %s is not a string?\n", __LINE__, s1 = TO_STR(p)); free(s1);}
     if (s7_string_length(p) != 4)
@@ -1410,7 +1423,7 @@ int main(int argc, char **argv)
       {fprintf(stderr, "%d: (eval '(+ 2 3 4)) is %s?\n", __LINE__, s1 = TO_STR(p)); free(s1);}
     s7_gc_on(sc, true);
 
-    p = s7_eval(sc, s7_cons(sc, s7_make_symbol(sc, "+"), /* s7.html example */
+    p = s7_eval(sc, s7_cons(sc, s7_make_symbol(sc, "+"), /* s7-ffi.html example */
                s7_cons(sc, s7_make_integer(sc, 1),
                   s7_cons(sc, s7_make_integer(sc, 2), s7_nil(sc)))),
                s7_nil(sc));
@@ -1422,7 +1435,7 @@ int main(int argc, char **argv)
 			      s7_nil(sc), "ffitest", __FILE__, __LINE__);
     if (s7_integer(p) != 3)
        {fprintf(stderr, "%d: (eval '(+ 1 2)) is %s?\n", __LINE__, s1 = TO_STR(p)); free(s1);}
-    p = s7_eval(sc, s7_cons(sc, s7_make_symbol(sc, "+"), /* s7.html example */
+    p = s7_eval(sc, s7_cons(sc, s7_make_symbol(sc, "+"), /* s7-ffi.html example */
                s7_cons(sc, s7_make_integer(sc, 1),
                   s7_cons(sc, s7_make_integer(sc, 3), s7_nil(sc)))),
                s7_rootlet(sc));
@@ -2063,18 +2076,18 @@ int main(int argc, char **argv)
       s7_load_c_string_with_environment(sc, (const char *)yet_another_var, yet_another_var_len, e);
       p = s7_symbol_local_value(sc, s7_make_symbol(sc, "yet-another-var"), e);
       if (s7_integer(p) != 123)
-	{fprintf(stderr, "load_c_string_with_environment: %s\n", s1 = TO_STR(p)); free(s1);}
+	{fprintf(stderr, "%d load_c_string_with_environment: %s\n", __LINE__, s1 = TO_STR(p)); free(s1);}
       s7_gc_unprotect_at(sc, gc_loc);
 
-      s7_load_c_string_with_environment(sc, (const char *)a_global_var, a_global_var_len, s7_nil(sc));
+      s7_load_c_string_with_environment(sc, (const char *)a_global_var, a_global_var_len, s7_rootlet(sc));
       p = s7_symbol_value(sc, s7_make_symbol(sc, "a-global-var"));
       if (s7_integer(p) != 321)
-	{fprintf(stderr, "load_c_string_with_environment nil: %s\n", s1 = TO_STR(p)); free(s1);}
+	{fprintf(stderr, "%d load_c_string_with_environment: %s\n", __LINE__, s1 = TO_STR(p)); free(s1);}
 
       s7_load_c_string_with_environment(sc, (const char *)a_test_var, a_test_var_len, s7_rootlet(sc));
       p = s7_symbol_value(sc, s7_make_symbol(sc, "a-test-var"));
       if (s7_integer(p) != 321)
-	{fprintf(stderr, "load_c_string_with_environment rootlet: %s\n", s1 = TO_STR(p)); free(s1);}
+	{fprintf(stderr, "%d load_c_string_with_environment rootlet: %s\n", __LINE__, s1 = TO_STR(p)); free(s1);}
 
       s7_load_with_environment(sc, "~/cl/ffitest.scm", s7_rootlet(sc));  /* rootlet=segfault 10-Jul-21 */
     }
@@ -2354,13 +2367,13 @@ int main(int argc, char **argv)
     gc2 = s7_gc_protect(sc, iter);
     x = s7_iterate(sc, iter);
     if (!s7_is_pair(x))
-      {fprintf(stderr, "x: %s\n", s1 = TO_STR(x)); free(s1);}
+      {fprintf(stderr, "%d: x: %s\n", __LINE__, s1 = TO_STR(x)); free(s1);}
     x = s7_iterate(sc, iter);
     if (!s7_is_pair(x))
-      {fprintf(stderr, "x: %s\n", s1 = TO_STR(x)); free(s1);}
+      {fprintf(stderr, "%d: x: %s\n", __LINE__, s1 = TO_STR(x)); free(s1);}
     x = s7_iterate(sc, iter);
     if (!s7_is_eq(s7_eof_object(sc), x))
-      {fprintf(stderr, "x: %s\n", s1 = TO_STR(x)); free(s1);}
+      {fprintf(stderr, "%d: x: %s\n", __LINE__, s1 = TO_STR(x)); free(s1);}
     s7_gc_unprotect_at(sc, gc1);
     s7_gc_unprotect_at(sc, gc2);
   }
@@ -2501,6 +2514,8 @@ int main(int argc, char **argv)
 
     s7_eval_c_string(sc, "(set! (hook-functions *error-hook*) ())");
   }
+  
+  make_and_free(sc);
 
 #if WITH_GMP
   s7_define_function(sc, "add-1", big_add_1, 1, 0, false, "(add-1 num) adds 1 to num");
@@ -2851,6 +2866,16 @@ int main(int argc, char **argv)
     if (s7_real(res) != 0.0) {fprintf(stderr, "(our_)abs: %s?\n", s1 = TO_STR(res)); free(s1);}
   }
 
+  {
+    s7_pointer v;
+    char *s1, *s2;
+    s7_define_expansion(sc, "1+", g_expand, 1, 0, false, "adds 1 at read-time");
+    v = s7_eval_c_string(sc, "#((1+ 0) 2 (1+ 2))");
+    s2 = s7_object_to_c_string(sc, v);
+    if (strcmp(s2, "#(1 2 3)") != 0) {fprintf(stderr, "%d v: %s\n", __LINE__, s1 = s7_object_to_c_string(sc, v)); free(s1);}
+    free(s2);
+  }
+
   { /* check realloc'd large block handling in s7_free */
     int i;
     s7_int addrs[20000];
@@ -2874,6 +2899,8 @@ int main(int argc, char **argv)
 	s7_gc_protect_via_stack(sc, p);
 	s7_object_to_string(sc, p, false); /* for check_stack_size */
       }}
+
+  make_and_free(sc);
 
   s7_quit(sc);
   free(perm1);

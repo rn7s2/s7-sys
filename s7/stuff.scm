@@ -124,6 +124,46 @@
        (set! (outlet ,e) (rootlet)) ; mimic (inlet ...)
        ,e)))
 
+(define-macro (typed-lambda args . body) ; (typed-lambda ((var [type])...) ...), (typed-lambda ((i integer?) (x real?) z) (+ i x z))
+  (if (symbol? args)
+      (apply lambda args body)
+      (let ((new-args (copy args)))
+	(do ((p new-args (cdr p)))
+	    ((not (pair? p)))
+	  (if (pair? (car p))
+	      (set-car! p (caar p))))
+	`(lambda ,new-args
+	   ,@(map (lambda (arg)
+		    (if (pair? arg)
+			`(unless (,(cadr arg) ,(car arg))
+			   (error 'wrong-type-arg "~S is not ~S~%" ',(car arg) ',(cadr arg)))
+			(values)))
+		  args)
+	   ,@body))))
+
+;;; ----------------
+
+(define (n-values n . args) ; called pick-values in fennel
+  (let ((len (length args)))
+    (if (<= len n) ; maybe issue a warning in this case: "not enough values"? and n==0 will return #<unspecified>
+	(apply values args)
+	(apply values (copy args (make-list n))))))
+
+;(display (+ 4 (n-values 2 (values 1 2 3)))) (newline)
+;(display (let () (define (f) (values 1 2 3)) (+ 4 (n-values 2 (f))))) (newline)
+;(display (let () (define (f) (values 1 2 3)) (+ 4 (n-values 1 (f))))) (newline)
+;(display (let () (define (f) (values 1 2 3)) (+ 4 (n-values 3 (f))))) (newline)
+;(display (let () (define (f) (values 1 2 3)) (+ 4 (n-values 12 (f))))) (newline)
+;(display (let () (define (f) 3) (+ 4 (n-values 12 (f))))) (newline)
+
+(define-macro (prog1 first . body)
+  (let ((result (gensym)))
+    `(let ((,result (list ,first)))
+       ,@body
+       (if (null? (cdr ,result))
+	   (car ,result)
+	   (apply values ,result)))))
+
 
 ;;; ----------------
 (define (first obj)  (if (sequence? obj) (obj 0) (error 'wrong-type-arg "first argument, ~S, is not a sequence" obj)))
@@ -309,13 +349,50 @@
       lst))
 |#
 
+(define swap! (letrec ((no-pairs? (lambda (lst) ; see s7test.scm for swap! examples
+				   (or (null? lst)
+				       (and (not (pair? (car lst)))
+					    (no-pairs? (cdr lst)))))))
+	        (macro (a b)
+		  (cond ((not (or (symbol? a) (pair? a)))
+			 (error 'wrong-type-arg "can't (swap! ~A ~A): ~A is not a symbol or a pair" a b a))
+			
+			((not (or (symbol? b) (pair? b)))
+			 (error 'wrong-type-arg "can't (swap! ~A ~A): ~A is not a symbol or a pair" a b b))
+			
+			((and (or (symbol? a) (hash-table? a) (let? a) (no-pairs? (cdr a)))
+			      (or (symbol? b) (hash-table? b) (let? b) (no-pairs? (cdr b))))
+			 ;; we assume above hash-tables and lets don't use expressions for the key/variable names
+			 (let ((tmp (gensym)))
+			   `(let ((,tmp ,a))
+			      (set! ,a ,b)
+			      (set! ,b ,tmp))))
+			
+			(else     ; here either a or b or both are pairs with exprs as "indices"
+			 (let ((a-object (if (pair? a) (car a) a))
+			       (b-object (if (pair? b) (car b) b))
+			       (a-indices (and (pair? a) (cdr a)))
+			       (b-indices (and (pair? b) (cdr b)))
+			       (tmp-a-indices (gensym))
+			       (tmp-b-indices (gensym))
+			       (tmp (gensym)))
+			   `(let ((,tmp-a-indices (and (pair? ',a) (map eval ',a-indices))) ; eval once-only in run-time env
+				  (,tmp-b-indices (and (pair? ',b) (map eval ',b-indices))))
+			      (let ((,tmp (if (pair? ',a) 
+					      (apply ,a-object ,tmp-a-indices)
+					      ,a)))
+				(if (pair? ',a)
+				    (if (not (pair? ',b))
+					(set! (,a-object (apply values ,tmp-a-indices)) ,b)
+					(set! (,a-object (apply values ,tmp-a-indices)) (apply ,b-object ,tmp-b-indices)))
+				    (set! ,a (apply ,b-object ,tmp-b-indices)))
+				(if (not (pair? ',b))
+				    (if (pair? ',a)
+					(set! ,b ,tmp))
+				    (set! (,b-object (apply values ,tmp-b-indices)) ,tmp))))))))))
+
 (define-macro (progv vars vals . body)
   `(apply (apply lambda ,vars ',body) ,vals))
-
-;; these also appear to work:
-;;   (define-macro (progv vars vals . body) `((apply lambda ,vars ',body) (apply values ,vals)))
-;;   (define-macro (progv vars vals . body) `((apply lambda ,vars ',body) `,@,vals))
-
 
 (define-macro (symbol-set! var val) ; like CL's set
   `(apply set! ,var ',val ()))
@@ -912,7 +989,7 @@ Unlike full-find-if, safe-find-if can handle any circularity in the sequences.")
 	 (error 'wrong-type-arg "log-n-of first argument, ~A, should be an integer" n))
 	((not (every? integer? ints))
 	 (error 'wrong-type-arg "log-n-of ints arguments, ~A, should all be integers" ints))
-	((not (positive? n))
+	((negative? n)
 	 (error 'out-of-range "log-n-of first argument should be positive: ~A" n))
 	(else
 	 (let ((len (length ints)))

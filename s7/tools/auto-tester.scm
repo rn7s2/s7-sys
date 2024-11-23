@@ -221,6 +221,7 @@
 (define-constant L_6 (let ((L (inlet 'a #f))) (let-set! L 'a L) (immutable! L)))
 
 (define fvref float-vector-ref)
+(define cvref complex-vector-ref)
 (define ivref int-vector-ref)
 (define bvref byte-vector-ref)
 (define vref vector-ref)
@@ -713,9 +714,10 @@
 (define-constant imiv2 (immutable! #i2d((1 2 3) (4 5 6))))
 (define-constant imiv3 (immutable! #i3d(((1 2 3) (1 2 4)) ((1 2 5) (1 2 6)) ((1 2 7) (1 2 8)))))
 (define-constant imfv (immutable! (float-vector 0 1 2)))
+(define-constant cmfv (immutable! (complex-vector 0+i 1+i 2+2i)))
 (define-constant imfv2 (immutable! #r2d((1 2 3) (4 5 6))))
 (define-constant imfv3 (immutable! #r3d(((1 2 3) (1 2 4)) ((1 2 5) (1 2 6)) ((1 2 7) (1 2 8)))))
-(define-constant imi (immutable! (inlet 'a 3 'b 2)))
+(define-constant imi (immutable! (let ((a 3) (b 2)) (immutable! 'a) (immutable! 'b) (curlet))))
 (define-constant ilt (immutable! (openlet (inlet 'let-ref-fallback (lambda (e sym) #<undefined>)))))
 
 (define-constant imh (immutable! (let ((H (make-hash-table 8 #f (cons symbol? integer?)))) (set! (H 'a) 1) (set! (H 'b) 2) H)))
@@ -739,13 +741,13 @@
 (define-constant vvvi (let ((v (make-vector '(2 2)))) (set! (v 0 0) "asd") (set! (v 0 1) #r(4 5 6)) (set! (v 1 0) '(1 2 3)) (set! (v 1 1) 32) (immutable! v)))
 (define-constant vvvf (immutable! (vector abs log sin)))
 
-(define big-let (let ((e (inlet)))
+(define-constant big-let (let ((e (inlet)))
 		  (let-temporarily (((*s7* 'print-length) 80))
 		    (do ((i 0 (+ i 1)))
 			((= i 100))
 		      (varlet e (symbol "abc" (number->string i)) i)))
 		  (immutable! e)))
-(define big-hash (let ((e (hash-table)))
+(define-constant big-hash (let ((e (hash-table)))
 		   (let-temporarily (((*s7* 'print-length) 80))
 		     (do ((i 0 (+ i 1)))
 			 ((= i 100))
@@ -791,14 +793,14 @@
 			 (immutable! ht)))
 
 (define-constant fvset float-vector-set!)
+(define-constant cvset complex-vector-set!)
 (define-constant htset hash-table-set!)
 
 (set! (hook-functions *unbound-variable-hook*) ())
 (define max-stack (*s7* 'stack-top))
 (define last-error-type #f)
 (define old-definee #f)
-(define-constant L0 (let ((a 1)) (immutable! 'a) (curlet)))
-(immutable! L0)
+(define-constant L0 (immutable! (let ((a 1)) (immutable! 'a) (curlet))))
 
 (define (tp val) ; omits trailing " if val long and already a string
   (let ((str (object->string val)))
@@ -940,7 +942,7 @@
 			  ;'eval ; -- can't use if signature (circular program) or (make-list (max-list-len))
 			  'checked-eval
 			  ;'immutable! ;-- lots of complaints that are hard to reproduce
-			  'checked-procedure-source
+			  'checked-procedure-source 'procedure-arglist
 			  ;'owlet ;too many uninteresting diffs
 			  ;'gc  ; slower? and can be trouble if called within an expression
 			  ;'reader-cond ;-- cond test clause can involve unbound vars: (null? i) for example, and the bugs of eval-time reader-cond are too annoying
@@ -948,7 +950,7 @@
 			  ;'random
 			  ;;; 'quote
 			  '*error-hook* ;'*autoload-hook*
-			  'cond-expand ; (cond-expand (reader-cond...)) too many times
+			  ;'cond-expand ; (cond-expand (reader-cond...)) too many times
 			  ;'random-state->list
                           ;'pair-line-number 'pair-filename ; -- too many uninteresting diffs
 			  'let-set!
@@ -971,17 +973,17 @@
 			  '*autoload*
 			  'sequence? 'directory? 'hash-table-entries
 			  'arity 'logbit?
-			  'random-state? 'throw 'float-vector-set! 'make-iterator 'complex
+			  'random-state? 'throw 'float-vector-set! 'make-iterator 'complex 'complex-vector-set!
 			  'let-ref 'int-vector 'aritable? 'gensym? 'syntax? 'iterator-at-end? 'let?
-			  'subvector 'float-vector 'iterator-sequence 'getenv 'float-vector-ref
+			  'subvector 'float-vector 'iterator-sequence 'getenv 'float-vector-ref 'complex-vector 'complex-vector-ref
 			  'cyclic-sequences 'let->list
 
 			  'setter 'int-vector?
 			  'int-vector-set! 'c-object? 'c-object-type 'proper-list?
 			  'symbol->dynamic-value
 			  'vector-append
-			  'flush-output-port 'c-pointer 'make-float-vector
-			  'iterate 'float-vector?
+			  'flush-output-port 'c-pointer 'make-float-vector 'make-complex-vector
+			  'iterate 'float-vector? 'complex-vector?
 			  'apply-values
 			  'values
 			  'byte-vector-ref 'file-exists? 'make-int-vector 'string-downcase 'string-upcase
@@ -1012,7 +1014,7 @@
 			  'make-cycle
 			  ;'make-c-tag1 ; from s7test.scm, as above
 
-			  'fvref 'ivref 'bvref 'vref 'fvset 'ivset 'bvset 'vset 'adder
+			  'fvref 'cvref 'ivref 'bvref 'vref 'fvset 'ivset 'bvset 'vset 'adder 'cvset
 
 			  'undefined-function
 			  'subsequence
@@ -1041,7 +1043,7 @@
 			  'ifa 'ifb ; see fix-op below
 
 			  '_asdf_
-			  'ims 'imbv 'imv 'imiv 'imfv 'imi 'imp 'imh 'ilt
+			  'ims 'imbv 'imv 'imiv 'imfv 'imi 'imp 'imh 'ilt 'cmfv
 			  'imv2 'imv3 'imfv2 'imfv3 'imiv2 'imiv3 'imbv2 'imbv3
 			  'vvv 'vvvi 'vvvf 'typed-hash 'typed-vector 'typed-let 'constant-let 'bight
 			  'a1 'a2 'a3 'a4 'a5 'a6
@@ -1173,6 +1175,7 @@
 		    "(let ((x 1)) (dynamic-wind (lambda () (set! x 2)) (lambda () (+ x 1)) (lambda () (set! x 1))))"
 
 		    "(let-temporarily ((x 1)) x)" "(let-temporarily ((x #(1)) (i 0)) i)"
+		    ;"(s7-init-and-free))"
 
 		    "1+1e10i" "1e15-1e15i" ;"0+1e18i" "-1e18"
 		    ;"(random 1.0)" ; number->string so lengths differ
@@ -1262,12 +1265,12 @@
 
 		    "(gensym \"g_123\")"
 		    "(make-list 256 1)" "(make-list 512 '(1))" "big-let" "big-hash"
-		    "(make-vector 256 #f)" "(make-byte-vector 256 0)" "(make-float-vector 256 0.0)" "(make-int-vector 256 0)"
+		    "(make-vector 256 #f)" "(make-byte-vector 256 0)" "(make-float-vector 256 0.0)" "(make-int-vector 256 0)" "(make-complex-vector 256 0.0)"
 		    "(make-vector '(2 3) 1)"             "(make-vector '(12 14) #<undefined>)"
 		    "(make-byte-vector '(2 3) 1)"        "(make-byte-vector '(4 32) 255)"
 		    "(make-string 256 #\\1)"             "(make-string 64 #\\a)"
 		    "(make-int-vector '(2 3) 1)"         "(make-int-vector '(2 128) -1)"
-		    "(make-float-vector '(2 3) 1)"       "(make-float-vector '(128 3) pi)"
+		    "(make-float-vector '(2 3) 1)"       "(make-float-vector '(128 3) pi)" "(make-complex-vector '(128 3) 0+i)"
 		    "(make-vector 3 'a symbol?)"         "(make-vector '(2 3 4 3 2 3 4) 1)"
 		    "(make-vector 3 1+i complex?)"       "(make-vector (make-list 10 2))"
 		    "(make-vector 3 #<eof> eof-object?)" "(make-vector (make-list 256 1))"
@@ -1321,7 +1324,7 @@
 		    "(let loop ((i 2)) (if (> i 0) (loop (- i 1)) i))"
 
 		    ;"(rootlet)" ; why was this commented out? -- very verbose useless diffs
-		    ;"(unlet)"
+		    ;"(unlet)"   ; same as above
 		    "(let? (curlet))"
 		    ;"*s7*"     ;variable
 
@@ -1472,21 +1475,23 @@
 ;                    (lambda (s) (string-append "(do ((j 0 (+ j 1))) ((= j 1)) (do ((i 0 (+ i 1))) ((= i 1)) (with-immutable (i j) (apply values " s " ()))))")))
 	      (list (let ((last-s "#f")) (lambda (s) (let ((res (string-append "(if (car (list " last-s ")) (begin " s "))"))) (set! last-s s) res)))
                     (let ((last-s "#f")) (lambda (s) (let ((res (string-append "(if (not (car (list " last-s "))) #<unspecified> (begin " s "))"))) (set! last-s s) res))))
-
 	      (list (lambda (s) (string-append "(let ((s1 (begin " s ")) (s2 (copy s1))) (member s1 (list s2)))"))
                     (lambda (s) (string-append "(let ((s1 (begin " s ")) (s2 (copy s1))) (member s1 (list s2) fequal?))")))
 	      (list (lambda (s) (string-append "(iterate (make-iterator (vector " s ")))"))
 		    (lambda (s) (string-append "(car (list " s "))")))
 	      (list (lambda (s) (string-append "(call-with-exit (lambda (return) (return " s ")))"))
 		    (lambda (s) (string-append "((lambda () (values " s ")))")))
-
 	      (list (lambda (s) (string-append "(let ((x #f)) (for-each (lambda (y) (set! x y)) (list " s ")) x)"))
 		    (lambda (s) (string-append "((lambda (x) (for-each (lambda y (set! x (car y))) (list " s ")) x) #f)")))
-
 	      (list (lambda (s) (string-append "(list (let () (let-temporarily (((*s7* 'openlets) #f)) " s ")))"))
                     (lambda (s) (string-append "(list (let ((old #f)) (dynamic-wind (lambda () (set! old (*s7* 'openlets)) (set! (*s7* 'openlets) #f)) (lambda () " s ") (lambda () (set! (*s7* 'openlets) old)))))")))
 	      (list (lambda (s) (string-append "(list (let () (let-temporarily (((*s7* 'safety) 1)) " s ")))"))
                     (lambda (s) (string-append "(list (let ((old #f)) (dynamic-wind (lambda () (set! old (*s7* 'safety))) (lambda () " s ") (lambda () (set! (*s7* 'safety) old)))))")))
+	      (list (lambda (s) (string-append "(map Hk (list " s "))"))
+		    (lambda (s) (string-append "(map _dilambda_ (list " s "))")))
+	      (list (lambda (s) (string-append "(let ((cc (call/cc (lambda (c) c)))) (if (continuation? cc) (cc (list " s ")) cc))"))
+		    (lambda (s) (string-append "(let ((cc (call-with-exit (lambda (c) c)))) (if (goto? cc) (list " s ")))")))
+
 	      ;; perhaps function port (see _rd3_ for open-input-string), gmp?
 	      ))
 
@@ -1889,32 +1894,15 @@
 	  ;(gc) (gc)
 	  (set! (*s7* 'print-length) 4096)
 	  (same-type? val1 val2 val3 val4 str str1 str2 str3 str4))
-	;(when (eq? outer-funcs last-func) (reseed))
 	(set! last-func outer-funcs))
 
-#|
-      (let ((size (memory-rusage)))
-	(if (> (- size current-size) 100)
-	    (format *stderr* "size: ~S -> ~S, ~S~%" current-size size estr))
-	(set! current-size size))
-|#
-
+      (when (setter Hk) (set! (setter Hk) #f))
       ;(unless (output-port? imfo) (format *stderr* "(new) imfo ~S -> ~S~%" estr imfo) (abort)) ; with-mock-data
       (set! *features* (copy %features%))
       (set! error-info #f)
       (set! error-type 'no-error)
       (set! error-code "")
-;     (when (pair? x) (format *stderr* "x is pair, estr: ~S~%" estr))
       (set! x 0)
-#|
-      (when (string-position "H_" str)
-	(if (string-position "H_1" str) (fill! H_1 #f))
-	(if (string-position "H_2" str) (fill! H_2 #f))
-	(if (string-position "H_3" str) (fill! H_3 #f))
-	(if (string-position "H_4" str) (fill! H_4 #f))
-	(if (string-position "H_5" str) (fill! H_5 #f))
-	(when (string-position "H_6" str) (fill! H_6 #f) (hash-table-set! H_6 'a H_6)))
-|#
       )
 
     (define dots (vector "." "-" "+" "-" "." "-" "+" "-"))
@@ -1930,22 +1918,6 @@
 	  (when (= n 8)
 	    (set! n 0)
 	    (format *stderr* " ~A " (daytime))
-;	    (format *stderr* " ~A " current-size)
-#|
-	    ;; these two tend to become seriously bloated -- maybe add setters
-	    (set! big-let (let ((e (inlet)))
-			    (let-temporarily (((*s7* 'print-length) 80))
-			      (do ((i 0 (+ i 1)))
-				  ((= i 100))
-				(varlet e (symbol "abc" (number->string i)) i)))
-			    e))
-	    (set! big-hash (let ((e (hash-table)))
-			     (let-temporarily (((*s7* 'print-length) 80))
-			       (do ((i 0 (+ i 1)))
-				   ((= i 100))
-				 (hash-table-set! e (symbol "abc" (number->string i)) i)))
-			     e))
-|#
 	    )
 	  (format *stderr* "~A" (vector-ref dots n)))
 

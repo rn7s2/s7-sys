@@ -43,6 +43,8 @@
 	((= i 40)) 
       (format *stderr* "~A: ~A~%" (car (counts i)) (cdr (counts i))))))
 
+;; 1109: eval 254, resize_heap_to, fx_c_sss, fx_c_opssq_direct, fx_add_s1, make_symbol
+
 ;;; ----------------------------------------
 
 (define global-val 0) ; for reader-cond in s7test.scm
@@ -59,7 +61,7 @@
   (define (s7test-reader)
     (let ((port (open-input-file "s7test.scm"))
 	  (counts (make-hash-table)))
-      (do ((expr (read port) (read port)))
+      (do ((expr (read port) (catch #t (lambda () (read port)) (lambda args 'error))))
 	  ((eof-object? expr) 
 	   (close-input-port port)
 	   counts)
@@ -77,6 +79,8 @@
   
   (sort-counts (s7test-reader)))
 
+;; 1658: hash_equal_real 446, eval 257, hash_equal_complex 230, hash_equal_integer 175, hash_equal_ratio 144
+
 ;;; ----------------------------------------
 
 (let ()
@@ -90,7 +94,7 @@
   (let ((val (hash-ints 5000000)))
     (unless (= val 5000000)
       (format *stderr* "thash hash-ints: ~S?~%" val))))
-
+;; 542: 184 fx_hash_table_increment_1, 135 fx_random_i, 80 hash_int, 51 resize_heap_to, 50 op_dox, 40 :opt_p_ppp_hash_table_increment
 
 ;;; ----------------------------------------
 

@@ -68,6 +68,24 @@
       (set! *libraries* (cons (cons "libgsl.scm" (curlet)) *libraries*))
       (set! *cload-library-name* "*libgsl*")
 
+      ;; from johnm
+      (define (matrix_of_floats scm) ;; float-vector -> gsl_matrix
+	(let ((gsl (apply gsl_matrix_alloc (vector-dimensions scm))))
+	  (float-vector->gsl_matrix scm gsl)))
+	 
+      (define (vector_of_floats scm) ;; float-vector -> gsl_vector
+	(let ((gsl (apply gsl_vector_alloc (vector-dimensions scm))))
+	  (float-vector->gsl_vector scm gsl)))
+
+      (define (floats_of_matrix gsl) ;; gsl_matrix -> float-vector
+	(let* ((size (gsl_matrix_size gsl))
+	       (scm (make-float-vector (list (car size) (cdr size)))))
+	  (gsl_matrix->float-vector gsl scm)))
+
+      (define (floats_of_vector gsl) ;; gsl_vector -> float-vector
+	(let ((scm (make-float-vector (gsl_vector_size gsl))))
+	  (gsl_vector->float-vector gsl scm)))
+
       (c-define
        '((C-macro (double (GSL_CONST_CGS_SPEED_OF_LIGHT GSL_CONST_CGS_GRAVITATIONAL_CONSTANT GSL_CONST_CGS_PLANCKS_CONSTANT_H
 			   GSL_CONST_CGS_PLANCKS_CONSTANT_HBAR GSL_CONST_CGS_ASTRONOMICAL_UNIT GSL_CONST_CGS_LIGHT_YEAR
@@ -203,7 +221,7 @@
 	       CblasUpper CblasLower CblasNonUnit CblasUnit CblasLeft CblasRight))
 
 	 (in-C "static s7_pointer g_free(s7_scheme *sc, s7_pointer args)
-                 {free(s7_c_pointer(s7_car(args))); return(s7_f(sc));}")
+                 {free(s7_c_pointer(s7_car(args))); return(s7_F);}")
 	 (C-function ("free" g_free "" 1))
 
 	 ;; redirect GSL errors to s7_error
@@ -798,12 +816,12 @@
 	 (in-C "
                 static s7_pointer g_gsl_sf_result_make(s7_scheme *sc, s7_pointer args)
                 {
-                  return(s7_make_c_pointer_with_type(sc, (void *)calloc(1, sizeof(gsl_sf_result)), gsl_sf_result__symbol, s7_f(sc)));
+                  return(s7_make_c_pointer_with_type(sc, (void *)calloc(1, sizeof(gsl_sf_result)), gsl_sf_result__symbol, s7_F));
                 }
                 static s7_pointer g_gsl_sf_result_free(s7_scheme *sc, s7_pointer args)
                 {
                   free(s7_c_pointer(s7_car(args)));
-                  return(s7_f(sc));
+                  return(s7_F);
                 }
                 static s7_pointer g_gsl_sf_result_val(s7_scheme *sc, s7_pointer args)
                 {
@@ -815,18 +833,18 @@
                 }
                 static s7_pointer g_gsl_sf_result_e10_make(s7_scheme *sc, s7_pointer args)
                 {
-                  return(s7_make_c_pointer_with_type(sc, (void *)calloc(1, sizeof(gsl_sf_result_e10)), gsl_sf_result_e10__symbol, s7_f(sc)));
+                  return(s7_make_c_pointer_with_type(sc, (void *)calloc(1, sizeof(gsl_sf_result_e10)), gsl_sf_result_e10__symbol, s7_F));
                 }
                 static s7_pointer g_to_doubles(s7_scheme *sc, s7_pointer args)
                 {
                   if (s7_is_vector(s7_car(args)))
-                    return(s7_make_c_pointer_with_type(sc, (void *)s7_float_vector_elements(s7_car(args)), double__symbol, s7_f(sc)));
+                    return(s7_make_c_pointer_with_type(sc, (void *)s7_float_vector_elements(s7_car(args)), double__symbol, s7_F));
                   return(s7_car(args));
                 }
                 static s7_pointer g_to_wrapped_doubles(s7_scheme *sc, s7_pointer args)
                 {
                   if (s7_is_vector(s7_car(args)))
-                    return(s7_make_c_pointer_wrapper_with_type(sc, (void *)s7_float_vector_elements(s7_car(args)), double__symbol, s7_f(sc)));
+                    return(s7_make_c_pointer_wrapper_with_type(sc, (void *)s7_float_vector_elements(s7_car(args)), double__symbol, s7_F));
                   return(s7_car(args));
                 }
                 ")
@@ -1472,25 +1490,26 @@
 	 (double gsl_spline_eval_integ (gsl_spline* double double gsl_interp_accel*))
 	 (void gsl_spline_free (gsl_spline*))
 
-	 ;; bspline
-	 (gsl_bspline_workspace* gsl_bspline_alloc (size_t size_t))
-	 (void gsl_bspline_free (gsl_bspline_workspace*))
-	 (size_t gsl_bspline_ncoeffs (gsl_bspline_workspace*))
-	 (size_t gsl_bspline_order (gsl_bspline_workspace*))
-	 (size_t gsl_bspline_nbreak (gsl_bspline_workspace*))
-	 (double gsl_bspline_breakpoint (size_t gsl_bspline_workspace*))
-	 (reader-cond ((>= gsl-version 1.16)
-		       (double gsl_bspline_greville_abscissa (size_t gsl_bspline_workspace*))
-		       (int gsl_bspline_knots_greville (gsl_vector* gsl_bspline_workspace* double*))))
-	 (int gsl_bspline_knots (gsl_vector* gsl_bspline_workspace*))
-	 (int gsl_bspline_knots_uniform (double double gsl_bspline_workspace*))
-	 (int gsl_bspline_eval (double gsl_vector* gsl_bspline_workspace*))
-	 (int gsl_bspline_eval_nonzero (double gsl_vector* size_t* size_t* gsl_bspline_workspace*))
-	   ;;; out 2.0 (gsl_bspline_deriv_workspace* gsl_bspline_deriv_alloc (size_t))
-	   ;;; out 2.0 (void gsl_bspline_deriv_free (gsl_bspline_deriv_workspace*))
-	 (reader-cond ((>= gsl-version 2.0)
-		       (int gsl_bspline_deriv_eval (double size_t gsl_matrix* gsl_bspline_workspace*))
-		       (int gsl_bspline_deriv_eval_nonzero (double size_t gsl_matrix* size_t* size_t* gsl_bspline_workspace*))))
+	 (reader-cond ((< gsl-version 2.8) ; see below for 2.8 bspline entries
+		       ;; bspline
+		       (gsl_bspline_workspace* gsl_bspline_alloc (size_t size_t))
+		       (void gsl_bspline_free (gsl_bspline_workspace*))
+		       ;; out 2.8 (size_t gsl_bspline_ncoeffs (gsl_bspline_workspace*))
+		       (size_t gsl_bspline_order (gsl_bspline_workspace*))
+		       (size_t gsl_bspline_nbreak (gsl_bspline_workspace*))
+		       (double gsl_bspline_breakpoint (size_t gsl_bspline_workspace*))
+		       (reader-cond ((>= gsl-version 1.16)
+				     (double gsl_bspline_greville_abscissa (size_t gsl_bspline_workspace*))))
+		       ;; out 2.8 (int gsl_bspline_knots_greville (gsl_vector* gsl_bspline_workspace* double*))
+		       ;; out 2.8 (int gsl_bspline_knots (gsl_vector* gsl_bspline_workspace*))
+		       ;; out 2.8 (int gsl_bspline_knots_uniform (double double gsl_bspline_workspace*))
+		       (int gsl_bspline_eval (double gsl_vector* gsl_bspline_workspace*))
+		       (int gsl_bspline_eval_nonzero (double gsl_vector* size_t* size_t* gsl_bspline_workspace*))
+		       ;; out 2.0 (gsl_bspline_deriv_workspace* gsl_bspline_deriv_alloc (size_t))
+		       ;; out 2.0 (void gsl_bspline_deriv_free (gsl_bspline_deriv_workspace*))
+		       (reader-cond ((>= gsl-version 2.0)
+				     ;; out 2.8 (int gsl_bspline_deriv_eval (double size_t gsl_matrix* gsl_bspline_workspace*))
+				     (int gsl_bspline_deriv_eval_nonzero (double size_t gsl_matrix* size_t* size_t* gsl_bspline_workspace*))))))
 
 	 ;; sort
 	 ;; perhaps size_t* -> int vector?
@@ -1666,6 +1685,15 @@
                 ")
 	 (C-function ("float-vector->gsl_vector" g_float_vector_to_gsl_vector "" 2))
 	 (C-function ("gsl_vector->float-vector" g_gsl_vector_to_float_vector "" 2))
+
+	 ;; from johnm
+	 (in-C "
+               static s7_pointer g_gsl_vector_size(s7_scheme *sc, s7_pointer args)
+               {
+                 gsl_vector *g; g = (gsl_vector *)s7_c_pointer_with_type(sc, s7_car(args), gsl_vector__symbol, __func__, 1);
+                 return(s7_make_integer(sc, (s7_int)(g->size)));
+               }")
+	 (C-function ("gsl_vector_size" g_gsl_vector_size "" 1))
 
 	 (gsl_vector* gsl_vector_alloc (size_t))
 	 (gsl_vector* gsl_vector_calloc (size_t))
@@ -2621,10 +2649,6 @@
 	 (gsl_matrix_complex* gsl_matrix_complex_alloc (size_t size_t))
 	 (gsl_matrix_complex* gsl_matrix_complex_calloc (size_t size_t))
 	 (gsl_matrix_complex* gsl_matrix_complex_alloc_from_matrix (gsl_matrix_complex* size_t size_t size_t size_t))
-	 (gsl_vector_complex* gsl_vector_complex_alloc_row_from_matrix (gsl_matrix_complex* size_t))
-	 (gsl_vector_complex* gsl_vector_complex_alloc_col_from_matrix (gsl_matrix_complex* size_t))
-	 (gsl_vector_complex* gsl_vector_complex_alloc (size_t))
-	 (void gsl_vector_complex_free (gsl_vector_complex*))
 	 (void gsl_matrix_complex_free (gsl_matrix_complex*))
 	 (void gsl_matrix_complex_set_zero (gsl_matrix_complex*))
 	 (void gsl_matrix_complex_set_identity (gsl_matrix_complex*))
@@ -2648,6 +2672,30 @@
 	 (int gsl_matrix_complex_sub (gsl_matrix_complex* gsl_matrix_complex*))
 	 (int gsl_matrix_complex_mul_elements (gsl_matrix_complex* gsl_matrix_complex*))
 	 (int gsl_matrix_complex_div_elements (gsl_matrix_complex* gsl_matrix_complex*))
+
+	 (gsl_vector_complex* gsl_vector_complex_alloc_row_from_matrix (gsl_matrix_complex* size_t))
+	 (gsl_vector_complex* gsl_vector_complex_alloc_col_from_matrix (gsl_matrix_complex* size_t))
+	 (gsl_vector_complex* gsl_vector_complex_alloc (size_t))
+	 (void gsl_vector_complex_free (gsl_vector_complex*))
+	 (void gsl_vector_complex_set_zero (gsl_vector_complex*))
+	 ;(void gsl_vector_complex_set_all (gsl_vector_complex* gsl_complex))
+	 (int gsl_vector_complex_set_basis (gsl_vector_complex* size_t))
+	 (int gsl_vector_complex_reverse (gsl_vector_complex*))
+	 (int gsl_vector_complex_swap (gsl_vector_complex* gsl_vector_complex*))
+	 (int gsl_vector_complex_swap_elements (gsl_vector_complex* size_t size_t))
+	 (int gsl_vector_complex_equal (gsl_vector_complex* gsl_vector_complex*))
+	 (int gsl_vector_complex_isnull (gsl_vector_complex*))
+	 (int gsl_vector_complex_ispos (gsl_vector_complex*))
+	 (int gsl_vector_complex_isneg (gsl_vector_complex*))
+	 (int gsl_vector_complex_isnonneg (gsl_vector_complex*))
+	 (int gsl_vector_complex_add (gsl_vector_complex* gsl_vector_complex*))
+	 (int gsl_vector_complex_sub (gsl_vector_complex* gsl_vector_complex*))
+	 (int gsl_vector_complex_mul (gsl_vector_complex* gsl_vector_complex*))
+	 (int gsl_vector_complex_div (gsl_vector_complex* gsl_vector_complex*))
+	 ;(int gsl_vector_complex_scale (gsl_vector_complex* gsl_complex))
+	 ;(int gsl_vector_complex_add_constant (gsl_vector_complex* gsl_complex))
+	 ;(int gsl_vector_complex_axpby (gsl_complex gsl_vector_complex* gsl_complex gsl_vector_complex*))
+	 ; what is gsl_complex?
 
 	 (in-C "
                 static s7_pointer g_gsl_matrix_complex_set_all(s7_scheme *sc, s7_pointer args)
@@ -2696,11 +2744,53 @@
                   g = gsl_vector_complex_get((gsl_vector_complex *)s7_c_pointer_with_type(sc, s7_car(args), gsl_vector_complex__symbol, __func__, 1), s7_integer(s7_cadr(args)));
                   return(GSL_TO_S7_COMPLEX(sc, g));
                 }
+                static s7_pointer g_gsl_vector_complex_set(s7_scheme *sc, s7_pointer args)
+                {
+                  gsl_complex g;
+                  s7_pointer cg;
+                  cg = s7_cadddr(args);
+                  S7_TO_GSL_COMPLEX(cg, g);
+                  gsl_vector_complex_set((gsl_vector_complex *)s7_c_pointer_with_type(sc, s7_car(args), gsl_vector_complex__symbol, __func__, 1), s7_integer(s7_cadr(args)), g);
+                  return(cg);
+                }
+                static s7_pointer g_complex_vector_to_gsl_vector_complex(s7_scheme *sc, s7_pointer args)
+                {
+                   gsl_vector_complex *g;
+                   int size;
+                   s7_pointer v;
+                   v = s7_car(args);
+                   size = s7_vector_length(v);
+                   g = (gsl_vector_complex *)s7_c_pointer_with_type(sc, s7_cadr(args), gsl_vector_complex__symbol, __func__, 2);
+                   memcpy((void *)(g->data), (void *)s7_complex_vector_elements(v), size * 2 * sizeof(double));
+                   return(s7_cadr(args));
+                }
+                static s7_pointer g_gsl_vector_complex_to_complex_vector(s7_scheme *sc, s7_pointer args)
+                {
+                   gsl_vector_complex *g;
+                   int size;
+                   s7_pointer v;
+                   v = s7_cadr(args);
+                   size = s7_vector_length(v);
+                   g = (gsl_vector_complex *)s7_c_pointer_with_type(sc, s7_car(args), gsl_vector_complex__symbol, __func__, 1);
+                   memcpy((void *)s7_complex_vector_elements(v), (void *)(g->data), size * 2 * sizeof(double));
+                   return(s7_cadr(args));
+                }
+                static s7_pointer g_gsl_vector_complex_to_complex_vector_wrapper(s7_scheme *sc, s7_pointer args)
+                {
+                   gsl_vector_complex *g;
+                   g = (gsl_vector_complex *)s7_c_pointer_with_type(sc, s7_car(args), gsl_vector_complex__symbol, __func__, 1);
+                   return(s7_make_complex_vector_wrapper(sc, g->size, (s7_complex *)(g->data), 1, NULL, false));
+                }
                 ")
+	 (C-function ("gsl_vector_complex->complex-vector-wrapper" g_gsl_vector_complex_to_complex_vector_wrapper "" 1))
+	 (C-function ("complex-vector->gsl_vector_complex" g_complex_vector_to_gsl_vector_complex "" 2))
+	 (C-function ("gsl_vector_complex->complex-vector" g_gsl_vector_complex_to_complex_vector "" 2))
+
 	 (C-function ("gsl_matrix_complex_set_all" g_gsl_matrix_complex_set_all "" 2))
 	 (C-function ("gsl_matrix_complex_set" g_gsl_matrix_complex_set "" 4))
 	 (C-function ("gsl_matrix_complex_get" g_gsl_matrix_complex_get "" 3))
 	 (C-function ("gsl_vector_complex_get" g_gsl_vector_complex_get "" 2))
+	 (C-function ("gsl_vector_complex_set" g_gsl_vector_complex_set "" 3))
 	 (C-function ("gsl_matrix_complex_scale" g_gsl_matrix_complex_scale "" 2))
 	 (C-function ("gsl_matrix_complex_add_constant" g_gsl_matrix_complex_add_constant "" 2))
 	 (C-function ("gsl_matrix_complex_add_diagonal" g_gsl_matrix_complex_add_diagonal "" 2))
@@ -3165,20 +3255,80 @@
 		       (int gsl_linalg_cholesky_band_rcond (gsl_matrix* double* gsl_vector*))
 		       ))
 
-	 ;; some 2.8 functions
-	 ;;    (gsl_matrix_complex_conjugate (gsl_matrix_complex*))
-	 ;;    (int gsl_linalg_QR_lssolvem_r (gsl_matrix* gsl_matrix* gsl_matrix* gsl_matrix* gsl_matrix*))
-	 ;;    (int gsl_linalg_complex_QR_QHmat_r(gsl_matrix_complex* gsl_matrix_complex* gsl_matrix_complex* gsl_matrix_complex*))
-	 ;;    (int gsl_linalg_complex_QR_lssolvem_r (gsl_matrix_complex* gsl_matrix_complex* gsl_matrix_complex* gsl_matrix_complex* gsl_matrix_complex*))
-	 ;;    (int gsl_linalg_complex_cholesky_scale(gsl_matrix_complex* gsl_vector*))
-	 ;;    (int gsl_linalg_complex_cholesky_scale_apply(gsl_matrix_complex* gsl_vector*))
-	 ;;    (int gsl_linalg_complex_cholesky_decomp2(gsl_matrix_complex* gsl_vector*))
-	 ;;    (int gsl_linalg_complex_cholesky_svx2 (gsl_matrix_complex* gsl_vector* gsl_vector_complex*))
-	 ;;    (int gsl_linalg_complex_cholesky_solve2 (gsl_matrix_complex* gsl_vector* gsl_vector_complex* gsl_vector_complex*))
-	 ;;    (int gsl_linalg_cholesky_decomp2(gsl_matrix* gsl_vector*))
-	 ;;    (int gsl_linalg_cholesky_svx2 (gsl_matrix* gsl_vector* gsl_vector*))
-	 ;;    (int gsl_linalg_cholesky_solve2 (gsl_matrix* gsl_vector* gsl_vector* gsl_vector*))
+	 (reader-cond ((>= gsl-version 2.8)
+		       (int gsl_vector_complex_div_real (gsl_vector_complex* gsl_vector*))
+		       (int gsl_vector_complex_conj_memcpy (gsl_vector_complex* gsl_vector_complex*))
+		       (int gsl_vector_complex_float_div_real (gsl_vector_complex_float* gsl_vector_float*))
+		       (int gsl_vector_complex_float_conj_memcpy (gsl_vector_complex_float* gsl_vector_complex_float*))
+		       (double gsl_rstat_norm (gsl_rstat_workspace*))
+		       (int gsl_multifit_linear_lcurvature_menger (gsl_vector* gsl_vector* gsl_vector*))
+		       (int gsl_matrix_complex_float_conjugate (gsl_matrix_complex_float*))
+		       (int gsl_matrix_complex_conjugate (gsl_matrix_complex*))
+		       (int gsl_linalg_complex_cholesky_scale (gsl_matrix_complex* gsl_vector*))
+		       (int gsl_linalg_complex_cholesky_scale_apply (gsl_matrix_complex* gsl_vector*))
+		       (int gsl_linalg_complex_cholesky_decomp2 (gsl_matrix_complex* gsl_vector*))
+		       (int gsl_linalg_complex_cholesky_svx2 (gsl_matrix_complex* gsl_vector* gsl_vector_complex*))
+		       (int gsl_linalg_complex_cholesky_solve2 (gsl_matrix_complex* gsl_vector* gsl_vector_complex* gsl_vector_complex*))
+		       (int gsl_linalg_QR_UU_lssvx (gsl_matrix* gsl_matrix* gsl_matrix* gsl_vector* gsl_vector*))
+		       (int gsl_linalg_QR_UR_lssolve (gsl_matrix* gsl_matrix* gsl_matrix* gsl_vector* gsl_vector* gsl_vector*))
+		       (int gsl_linalg_QR_UR_lssvx (gsl_matrix* gsl_matrix* gsl_matrix* gsl_vector* gsl_vector*))
+		       (int gsl_linalg_QR_UR_QTvec (gsl_matrix* gsl_matrix* gsl_vector* gsl_vector*))
+		       (int gsl_linalg_QR_UD_lssvx (gsl_matrix* gsl_matrix* gsl_matrix* gsl_vector* gsl_vector*))
+		       (int gsl_linalg_QR_UD_QTvec (gsl_matrix* gsl_matrix* gsl_vector* gsl_vector*))
+		       (int gsl_linalg_complex_QR_QHmat_r (gsl_matrix_complex* gsl_matrix_complex* gsl_matrix_complex* gsl_matrix_complex*))
+		       (int gsl_linalg_complex_QR_lssolvem_r (gsl_matrix_complex* gsl_matrix_complex* gsl_matrix_complex* gsl_matrix_complex* gsl_matrix_complex*))
+		       (int gsl_linalg_QR_lssolvem_r (gsl_matrix* gsl_matrix* gsl_matrix* gsl_matrix* gsl_matrix*))
+		       (int gsl_linalg_SV_solve2 (double gsl_matrix* gsl_matrix* gsl_vector* gsl_vector* gsl_vector* gsl_vector*))
+		       (int gsl_linalg_SV_lssolve (double gsl_matrix* gsl_matrix* gsl_vector* gsl_vector* gsl_vector* double* gsl_vector*))
+		       (gsl_integration_lebedev_workspace* gsl_integration_lebedev_alloc (size_t))
+		       (void gsl_integration_lebedev_free (gsl_integration_lebedev_workspace*))
+		       (size_t gsl_integration_lebedev_n (gsl_integration_lebedev_workspace*))
 
+		       ;; replace all bspline.h with:
+		       (gsl_bspline_workspace* gsl_bspline_alloc (size_t size_t))
+		       (gsl_bspline_workspace* gsl_bspline_alloc_ncontrol (size_t size_t))
+		       (void gsl_bspline_free (gsl_bspline_workspace*))
+		       (size_t gsl_bspline_ncontrol (gsl_bspline_workspace*))
+		       (size_t gsl_bspline_order (gsl_bspline_workspace*))
+		       (size_t gsl_bspline_nbreak (gsl_bspline_workspace*))
+		       (double gsl_bspline_breakpoint (size_t gsl_bspline_workspace*))
+		       (double gsl_bspline_greville_abscissa (size_t gsl_bspline_workspace*))
+		       (int gsl_bspline_init_augment (gsl_vector* gsl_bspline_workspace*))
+		       (int gsl_bspline_init_uniform (double double gsl_bspline_workspace*))
+		       (int gsl_bspline_init_periodic (double double gsl_bspline_workspace*))
+		       (int gsl_bspline_init (gsl_vector* gsl_bspline_workspace*))
+		       (int gsl_bspline_proj_rhs (gsl_function* gsl_vector* gsl_bspline_workspace*))
+		       (size_t gsl_bspline_find_interval (double int* gsl_bspline_workspace*))
+		       (int gsl_bspline_calc (double gsl_vector* double* gsl_bspline_workspace*))
+		       (int gsl_bspline_calc_deriv (double gsl_vector* size_t double* gsl_bspline_workspace*))
+		       (int gsl_bspline_vector_calc (double gsl_matrix* gsl_vector* gsl_bspline_workspace*))
+		       (int gsl_bspline_vector_calc_deriv (double gsl_matrix* size_t gsl_vector* gsl_bspline_workspace*))
+		       (int gsl_bspline_eval_basis (double gsl_vector* gsl_bspline_workspace*))
+		       (int gsl_bspline_basis (double gsl_vector* size_t* gsl_bspline_workspace*))
+		       (int gsl_bspline_eval_deriv_basis (double size_t gsl_matrix* gsl_bspline_workspace*))
+		       (int gsl_bspline_basis_deriv (double size_t gsl_matrix* size_t* gsl_bspline_workspace*))
+		       (int gsl_bspline_init_greville (gsl_vector* gsl_bspline_workspace* double*))
+		       (int gsl_bspline_gram (size_t gsl_matrix* gsl_bspline_workspace*))
+		       (int gsl_bspline_gram_interval (double double size_t gsl_matrix* gsl_bspline_workspace*))
+		       (int gsl_bspline_oprod (size_t double gsl_matrix* gsl_bspline_workspace*))
+		       (int gsl_bspline_calc_integ (double double gsl_vector* double* gsl_bspline_workspace*))
+		       (int gsl_bspline_basis_integ (double double gsl_vector* gsl_bspline_workspace*))
+		       (int gsl_bspline_init_interp (gsl_vector* gsl_bspline_workspace*))
+		       (int gsl_bspline_init_hermite (size_t gsl_vector* gsl_bspline_workspace*))
+		       (int gsl_bspline_col_interp (gsl_vector* gsl_matrix* gsl_bspline_workspace*))
+		       (int gsl_bspline_interp_chermite (gsl_vector* gsl_vector* gsl_vector* gsl_vector* gsl_bspline_workspace*))
+		       (int gsl_bspline_lssolve (gsl_vector* gsl_vector* gsl_vector* double* gsl_bspline_workspace*))
+		       (int gsl_bspline_wlssolve (gsl_vector* gsl_vector* gsl_vector* gsl_vector* double* gsl_bspline_workspace*))
+		       (int gsl_bspline_lsnormal (gsl_vector* gsl_vector* gsl_vector* gsl_vector* gsl_matrix* gsl_bspline_workspace*))
+		       (int gsl_bspline_lsnormalm (gsl_vector* gsl_matrix* gsl_vector* gsl_matrix* gsl_matrix* gsl_bspline_workspace*))
+		       (int gsl_bspline_plssolve (gsl_vector* gsl_vector* gsl_vector* double* gsl_bspline_workspace*))
+		       (int gsl_bspline_pwlssolve (gsl_vector* gsl_vector* gsl_vector* gsl_vector* double* gsl_bspline_workspace*))
+		       (int gsl_bspline_plsqr (gsl_vector* gsl_vector* gsl_vector* gsl_matrix* gsl_vector* double* gsl_bspline_workspace*))
+		       (int gsl_bspline_residuals (gsl_vector* gsl_vector* gsl_vector* gsl_vector* gsl_bspline_workspace*))
+		       (int gsl_bspline_covariance (gsl_matrix* gsl_matrix* gsl_bspline_workspace*))
+		       (int gsl_bspline_rcond (gsl_matrix* double* gsl_bspline_workspace*))
+		       (int gsl_bspline_err (double size_t gsl_matrix* double* gsl_bspline_workspace*))
+		       ))
 	 )
        "" (list "gsl/gsl_blas.h"
 		"gsl/gsl_blas_types.h"

@@ -1,6 +1,6 @@
 [package]
 name = "s7-sys"
-version = "0.1.4"
+version = "11.2.0"
 authors = ["rn7s2 <mail@rn7s2.cn>"]
 edition = "2021"
 build = "build.rs"
@@ -11,7 +11,6 @@ description = "Rust bindings to s7 Scheme C API"
 repository = "https://github.com/rn7s2/s7-sys"
 documentation = "https://docs.rs/s7-sys"
 
-
 [build-dependencies]
-bindgen = "0.69.4"
-cc = "<1.0.97"
+bindgen = "0.70.1"
+cc = "1.0"

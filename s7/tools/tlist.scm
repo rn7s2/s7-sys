@@ -4,7 +4,6 @@
 
 (define count 150000)
 
-
 (define (cxr tries)
   (let* ((iv (make-list 28))
 	 (v (list '((1)) '(1 2) '((1 . 2)) '(1 2 . 3) '(((1))) '(1 (2)) '((1 2)) '(((1 . 2))) '(1 2 3)
@@ -178,7 +177,7 @@
       (set! L1 (reverse L))
       (set! L1 (reverse! L1))
       (set! L1 (sort! L >))
-      (set! L1 (fill! L 0))
+      (set! L1 (fill! L 0)) ; fill! returns the fill value -> 0
       (set! L1 (copy L))
       (set-car! v (assq 'd alist))
       (list-set! v 1 (assv 'd alist))
@@ -190,7 +189,6 @@
       (format *stderr* "look: ~S~%" v))))
 
 (look count)
-
 
 
 (define c?r
@@ -205,7 +203,7 @@
       (set! body (list f body)))
     (lambda (path)
       (set! body 'lst)
-      (for-each extend-path (reverse (X-marks-the-spot () path)))
+      (for-each extend-path (reverse (X-marks-the-spot () path))) ; reverse! saves 30
       body)))
 
 (define (find-X tries)
@@ -245,7 +243,6 @@
     (list-r 0 0 6)))
 
 (list-test (/ count 10))
-
 
 
 (exit)

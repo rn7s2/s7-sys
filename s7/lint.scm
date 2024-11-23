@@ -15,10 +15,10 @@
 (define *report-short-branch* 12)                         ; controls when a lop-sided if triggers a reordering suggestion
 (define *report-one-armed-if* 90)                         ; if -> when/unless, can be #f/#t; if an integer, sets tree length which triggers revision (80 is too small)
 (define *report-loaded-files* #f)                         ; if load is encountered, include that file in the lint process
-(define *report-any-!-as-setter* #t)                      ; unknown funcs/macros ending in ! are treated as setters
+(define *report-any-!-as-setter* (defined? 'full-s7test)) ; unknown funcs/macros ending in ! are treated as setters
 (define *report-doc-strings* #f)                          ; old-style (CL) doc strings (definstrument ignores this switch -- see ws.scm)
 (define *report-func-as-arg-arity-mismatch* #f)           ; as it says...
-(define *report-combinable-lets* #t)                      ; report lets that can be combined
+(define *report-combinable-lets* (defined? 'full-s7test)) ; report lets that can be combined
 (define *report-splittable-lets* #f)                      ; report let*'s that can be split into a few nested lets
 
 (define *report-ridiculous-variable-names* 50)            ; max length of var name
@@ -34,11 +34,11 @@
 (define *report-sloppy-assoc* #f)                         ; i.e. (cdr (assoc x y)) and the like
 (define *report-bloated-arg* 24)                          ; min arg expr tree size that can trigger a rewrite-as-let suggestion (32 is too high I think)
 (define *report-clobbered-function-return-value* #f)      ; function returns constant sequence, which is then stomped on -- very rare!
-(define *report-boolean-functions-misbehaving* #t)        ; function name ends in #\? but function returns a non-boolean value -- dubious.
-(define *report-quasiquote-rewrites* #t)                  ; simple quasiquote stuff rewritten as a normal list expression
+(define *report-boolean-functions-misbehaving* (defined? 'full-s7test)) ; function name ends in #\? but function returns a non-boolean value -- dubious.
+(define *report-quasiquote-rewrites* (defined? 'full-s7test)) ; simple quasiquote stuff rewritten as a normal list expression
 (define *report-||-rewrites* #t)                          ; | has no special meaning in s7, |...| does not represent the symbol ...
-(define *report-constant-expressions-in-do* #t)           ; a first stab at this
-(define *report-recursion->iteration* #t)                 ; named-let -> do and the like
+(define *report-constant-expressions-in-do* (defined? 'full-s7test)) ; a first stab at this
+(define *report-recursion->iteration* (defined? 'full-s7test)) ; named-let -> do and the like
 
 ;;; these turn out to be less useful than I expected
 (define *report-repeated-code-fragments* #f)              ; #t, #f, or an int = min reported fragment size * uses * uses, #t=130.
@@ -119,8 +119,8 @@
 	      cddar cdddar cddddr cdddr cddr cdr ceiling char->integer char-alphabetic? char-ci<=?
 	      char-ci<? char-ci=? char-ci>=? char-ci>? char-downcase char-lower-case? char-numeric?
 	      char-position char-ready? char-upcase char-upper-case? char-whitespace? char<=? char<?
-	      char=? char>=? char>? char? complex complex? cond cons continuation? cos constant?
-	      cosh curlet current-error-port current-input-port current-output-port cyclic-sequences
+	      char=? char>=? char>? char? complex complex? complex-vector? complex-vector complex-vector-ref complex-vector-set!
+	      cond cons continuation? cos constant? cosh curlet current-error-port current-input-port current-output-port cyclic-sequences
 	      defined? denominator dilambda? do dynamic-wind
 	      eof-object? eq? equal? eqv? even? exact->inexact exact? exp expt
 	      float? float-vector float-vector-ref float-vector? floor for-each funclet
@@ -164,7 +164,7 @@
 			       (lambda (op)
 				 (set! (ht op) #t))
 			       '(symbol? gensym? keyword? let? openlet? iterator? macro? c-pointer? c-object? c-object-type constant? subvector?
-			         input-port? output-port? eof-object? integer? number? real? complex? rational? random-state?
+			         input-port? output-port? eof-object? integer? number? real? complex? complex-vector? rational? random-state?
 			         char? string? list? pair? vector? float-vector? int-vector? byte-vector? hash-table?
 			         continuation? procedure? dilambda? boolean? float? proper-list? sequence? null? gensym
 			         symbol->string string->symbol symbol symbol->value symbol->dynamic-value
@@ -197,6 +197,7 @@
 			         make-vector subvector vector float-vector make-float-vector float-vector-set! vector-rank vector-typer
 			         float-vector-ref int-vector make-int-vector int-vector-set! int-vector-ref string->byte-vector
 			         byte-vector make-byte-vector hash-table  make-hash-table hash-table-ref hash-table-key-typer hash-table-value-typer
+				 complex-vector make-complex-vector complex-vector-ref complex-vector-set!
 			         hash-table-set! hash-table-entries cyclic-sequences call/cc call-with-current-continuation
 			         call-with-exit load autoload eval eval-string apply for-each map dynamic-wind values
 			         catch throw error documentation signature help procedure-arglist procedure-source funclet
@@ -208,7 +209,7 @@
 				 tree-count tree-set-memq tree-cyclic?))
 			      ht))
 
-	(side-effect-functions '(provide list-set! fill! reverse! sort! vector-fill! vector-set! float-vector-set! int-vector-set! byte-vector-set!
+	(side-effect-functions '(provide list-set! fill! reverse! sort! vector-fill! vector-set! float-vector-set! int-vector-set! byte-vector-set! complex-vector-set!
 				 string->byte-vector string-set! hash-table-set! call/cc call-with-current-continuation load autoload eval eval-string
 				 apply set-current-error-port display set-current-input-port set-current-output-port write close-input-port
 				 close-output-port flush-output-port open-input-file open-output-file open-input-string open-output-string
@@ -993,7 +994,7 @@
 				     cosh cyclic-sequences
 				     denominator dilambda?
 				     eof-object? eq? equal? eqv? even? exact->inexact exact? exp expt
-				     float? float-vector-ref float-vector? floor
+				     float? float-vector-ref float-vector? floor complex-vector? complex-vector-ref
 				     gcd gensym?
 				     hash-table-entries hash-table-ref hash-table?
 				     imag-part immutable? inexact->exact inexact? infinite? inlet input-port?
@@ -5239,20 +5240,20 @@
 						     ((gcd) (eq? op2 'lcm))
 						     ((lcm) (eq? op2 'gcd))
 						     (else #f)))
-					      (list 'abs (cons '* (cdr arg1))))    ; (* (gcd a b) (lcm a b)) -> (abs (* a b)) but only if 2 args?
+					      (list 'abs (cons '* (cdr arg1))))  ; (* (gcd a b) (lcm a b)) -> (abs (* a b)) but only if 2 args?
 
-					     ((and (eq? op1 'exp)         ; (* (exp a) (exp b)) -> (exp (+ a b))
+					     ((and (eq? op1 'exp)                ; (* (exp a) (exp b)) -> (exp (+ a b))
 						   (eq? op2 'exp))
 					      (list 'exp (list '+ (cadr arg1) (cadr arg2))))
 
-					     ((and (eq? op1 'sqrt)                ; (* (sqrt x) (sqrt y)) -> (sqrt (* x y))??
+					     ((and (eq? op1 'sqrt)               ; (* (sqrt x) (sqrt y)) -> (sqrt (* x y))??
 						   (eq? op2 'sqrt))
 					      (list 'sqrt (list '* (cadr arg1) (cadr arg2))))
 
 					     ((not (and (eq? op1 'expt) (eq? op2 'expt)))
 					      (cons '* val))
 
-					     ((equal? (cadr arg1) (cadr arg2)) ; (* (expt x y) (expt x z)) -> (expt x (+ y z))
+					     ((equal? (cadr arg1) (cadr arg2))   ; (* (expt x y) (expt x z)) -> (expt x (+ y z))
 					      (list 'expt (cadr arg1) (list '+ (caddr arg1) (caddr arg2))))
 
 					     ((equal? (caddr arg1) (caddr arg2)) ; (* (expt x y) (expt z y)) -> (expt (* x z) y)
@@ -6132,8 +6133,8 @@
 	    (let ()
 	      (define (numang args form env)
 		(cond ((not (pair? args)) form)
-		      ((eqv? (car args) -1) 'pi)
-		      ((or (equivalent? (car args) 0.0)
+		      ((eqv? (car args) -1) 'pi)             ; (angle -1) -> pi
+		      ((or (equivalent? (car args) 0.0)      ; (angle 0.0) -> 0.0
 			   (eq? (car args) 'pi))
 		       0.0)
 		      (else (cons 'angle args))))
@@ -18374,7 +18375,7 @@
 			 (if (not (equal? result exprs))
 			     (set! result :unequal)))
 
-		     (if (and (len>1? exprs)           ; this gets no hits -- it paralells a similar bug in cond: (test expr => expr)
+		     (if (and (len>1? exprs)           ; this gets no hits -- it parallels a similar bug in cond: (test expr => expr)
 			      (memq '=> (cdr exprs)))
 			 (lint-format "'=> has no effect here: ~A~%" caller (truncated-list->string clause)))
 
